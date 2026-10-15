@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import JSON, Column, Date, DateTime, Index, Integer, Numeric, String, Table, Text
+from sqlalchemy import JSON, Column, Date, DateTime, Index, Integer, Numeric, String, Table, Text, UniqueConstraint
 from tbo_platform_kit.db import component_metadata
 
 from tbo_technical_engine.settings import SHORT_NAME
@@ -72,3 +72,37 @@ market_context = Table(
     Column("data_quality", String(10), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
+
+# The daily snapshot of one stock (TE6): `data` is the contract's technical_snapshot record. `content_hash` is the hash
+# of that record without `computed_at`, so the 08:00 refresh publishes only the stocks whose snapshot changed and a
+# retried job publishes nothing twice.
+technical_snapshot = Table(
+    "technical_snapshot",
+    metadata,
+    Column("as_of_date", Date, primary_key=True),
+    Column("isin", String(12), primary_key=True),
+    Column("data", JSON, nullable=False),
+    Column("content_hash", String(64), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+# One swing setup per stock per session (the detectors' precedence picks it). The ID is derived, so a retry is a no-op.
+swing_setup = Table(
+    "swing_setup",
+    metadata,
+    Column("setup_id", String(26), primary_key=True),
+    Column("isin", String(12), nullable=False),
+    Column("setup_date", Date, nullable=False),
+    Column("setup_type", String(40), nullable=False),
+    Column("side", String(4), nullable=False),
+    Column("entry", Numeric(14, 2), nullable=False),
+    Column("stop", Numeric(14, 2), nullable=False),
+    Column("target_1", Numeric(14, 2), nullable=False),
+    Column("target_2", Numeric(14, 2), nullable=True),
+    Column("valid_until_date", Date, nullable=False),
+    Column("params_version", String(40), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("isin", "setup_date", name="uq_swing_setup_isin_date"),
+)
+Index("ix_swing_setup_date", swing_setup.c.setup_date, swing_setup.c.isin)

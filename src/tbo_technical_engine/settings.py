@@ -33,3 +33,5 @@ class Settings(ComponentSettings, short_name=SHORT_NAME, repository=REPOSITORY):
     """A previous-session CPR narrower than this percent of its pivot makes the day `narrow` (trend day likely)."""
     cpr_wide_pct: float = 0.5
     """Wider than this: `wide` (range day likely). Starting values, to be tuned by the backtest."""
+    swing_file: Path = Path("config/swing.yaml")
+    """The swing analysis parameters (`config/swing.yaml`); read by the daily snapshot job, and a bad file stops it."""

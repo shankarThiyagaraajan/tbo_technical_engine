@@ -1,0 +1,90 @@
+# Swing analysis and the daily snapshot (TE6). Every value is a starting value from the plan or a convention noted
+# beside it; none has been tuned on real data yet. A change to any value is a new `params_version`, which is stored on
+# every swing setup it produced. All prices are daily candles (adjusted for corporate actions), IST sessions.
+params_version: "2026.10.1"
+
+history_days: 400          # calendar days of daily candles read per stock: about 275 sessions, enough for 52 weeks and EMA(200)
+turnover_lookback_days: 40 # calendar days of UNADJUSTED daily candles for the traded value (a split must not shrink it)
+min_bars: 61               # sessions a stock needs: the 60-day return needs 61 closes. Fewer: no snapshot for that stock.
+fetch_concurrency: 8       # stocks fetched at the same time
+max_failed_share: 0.2      # more stocks than this share failing to load: nothing is published (ranks would be skewed); the job retries
+
+trend:
+  fast: 20
+  mid: 50
+  slow: 200
+  slope_bars: 10           # the mid EMA must be higher than this many sessions ago to count as rising
+  adx_period: 14
+  adx_min: 20              # below this ADX there is no trend whatever the averages say: sideways
+  adx_full: 30             # at or above this ADX the alignment counts in full; below it the score is scaled down
+  up_at: 65                # alignment points (0-100, bullish) at or above this: up
+  down_at: 35              # at or below this: down; in between: sideways
+  # Points for each bullish condition; a condition that cannot be evaluated yet (EMA 200 needs 200 sessions) drops out
+  # and the rest are rescaled, so a young stock is not called bearish for being young.
+  weights:
+    close_above_fast: 15
+    close_above_mid: 15
+    fast_above_mid: 15
+    mid_above_slow: 20
+    mid_rising: 15
+    di_bullish: 20
+
+relative_strength:
+  weight_20d: 0.5          # the percentile is the weighted mean of the 20-day and the 60-day return ranks
+  weight_60d: 0.5
+
+levels:
+  pivot_wing: 3            # a swing high/low is the extreme of this many sessions each side
+  lookback: 250
+  cluster_atr: 0.5         # pivots closer than this many ATR (from the lowest of the cluster) form one zone
+  min_touches: 2
+  band_atr: 0.25           # width of the zone drawn around a single price (52-week and prior-month extremes)
+  max_levels: 12
+
+volatility:
+  atr_period: 14
+  percentile_window: 252   # sessions: "its own last year"
+  min_points: 20           # fewer ATR % values than this: the percentile is 50 (no information)
+  contracting_below: 25    # percentile at or below: contracting
+  expanding_above: 75      # at or above: expanding
+  bollinger_period: 20
+  bollinger_k: 2.0
+  squeeze_window: 126      # sessions of bandwidth the current one is ranked against (about six months)
+  squeeze_percentile: 20   # bandwidth at or below this percentile of that window: squeeze
+  squeeze_min_points: 60
+
+liquidity:
+  turnover_days: 20
+  spread_days: 20
+  spread_min_pairs: 10     # fewer valid two-day estimates than this: the spread is null
+
+setups:
+  valid_days: 3            # a setup stays valid to the end of this many sessions after the one it was found after
+  risk_atr_min: 0.5        # a stop closer than this many ATR is noise: no setup
+  risk_atr_max: 4.0        # a stop further than this is not a trade worth the size: no setup
+  # One setup per stock per session; when several fire the first in this order wins.
+  precedence: [week_52_high_breakout, base_breakout, ema_pullback]
+  base_breakout:
+    base_bars: 20          # sessions before the breakout that form the base
+    max_depth_pct: 12      # the base's high-to-low depth, as a percent of its high
+    volume_ratio_min: 1.5  # breakout volume against the 20-session mean before it
+    close_above_pct: 0.1   # close above the base high by at least this percent
+    stop_buffer_atr: 0.1   # stop: the base low minus this many ATR
+    target_1_r: 1.5
+    target_2_r: 3.0
+  ema_pullback:
+    ema: [20, 50]          # tried in this order: the first one the low touched
+    touch_pct: 0.5         # the low came within this percent above the EMA, or below it
+    pullback_bars: 10
+    min_pullback_pct: 2.0  # the close is at least this far below the high of those sessions
+    stop_buffer_atr: 0.25  # stop: the lower of the day's low and the EMA, minus this many ATR
+    target_1_r: 1.5
+    target_2_r: 2.5
+  week_52_high_breakout:
+    lookback: 250          # sessions before the breakout whose high must be exceeded
+    min_bars: 200
+    volume_ratio_min: 1.2
+    close_in_range_min: 0.5  # the close sits in the upper half of the day's range or higher
+    stop_atr: 1.5          # stop: this many ATR below the old high (the breakout level)
+    target_1_r: 2.0
+    target_2_r: 4.0

@@ -28,8 +28,8 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pyt
 
 `src/tbo_technical_engine/`: `api/` routes (`stub.py` = 501 answers, removed as phases land) · `schemas/` pydantic (requests,
 internal records) · `clients/` (market feed, fundamental engine) · `consumers/` (`candle.closed`, `feed.status`) ·
-`indicators/` · `strategies/` (the five rules) · `context/` (pure market-context functions, index source seam) · `services/` (evaluator, signal runner, cooldowns) · `store/` · `utils/` · `apps/` (process entry points:
-`signal_worker`) · `tasks.py` (Celery) · `main.py` (api). `config/` holds `strategies.yaml`. `tests/` mirrors the package.
+`indicators/` · `strategies/` (the five rules) · `context/` (pure market-context functions, index source seam) · `swing/` (pure daily-candle analysis: trend, levels, volatility, liquidity, rank, setups) · `services/` (evaluator, signal runner, cooldowns, snapshot service) · `store/` · `utils/` · `apps/` (process entry points:
+`signal_worker`) · `tasks.py` (Celery; Beat 16:00 and 08:00 IST run the swing snapshot on the `technical.swing` queue) · `main.py` (api). `config/` holds `strategies.yaml` and `swing.yaml` (the Dockerfile must copy `config/`). `tests/` mirrors the package.
 
 ## CI is not run
 

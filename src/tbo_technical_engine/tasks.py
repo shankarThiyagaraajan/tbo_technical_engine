@@ -9,12 +9,15 @@ import asyncio
 from datetime import timedelta
 
 import redis.asyncio as aioredis
+from celery import Task
 from tbo_platform_kit.calendar import now_utc
 from tbo_platform_kit.celery_app import create_celery, crontab_ist, every, queue_name, research_task
 from tbo_platform_kit.db import create_engine, session_factory
 from tbo_platform_kit.events import EventPublisher
 
 from tbo_technical_engine import outbox
+from tbo_technical_engine.services.snapshot_job import run_job
+from tbo_technical_engine.services.snapshot_service import IncompleteRun, Kind
 from tbo_technical_engine.settings import REPOSITORY, SHORT_NAME, Settings
 from tbo_technical_engine.store import indicators as indicator_store
 
@@ -22,6 +25,8 @@ settings = Settings()
 celery = create_celery(settings)
 OUTBOX = queue_name(SHORT_NAME, "outbox")
 MAINTENANCE = queue_name(SHORT_NAME, "maintenance")
+SWING = queue_name(SHORT_NAME, "swing")
+"""The daily swing run (snapshots and setups). Its worker must consume this queue (`-Q ...,technical.swing`)."""
 celery.conf.beat_schedule = {
     "flush_outbox": every(30, f"{SHORT_NAME}.flush_outbox", queue=OUTBOX),
     # 02:30 IST, long after the session: drop audit rows older than the retention.
@@ -29,6 +34,17 @@ celery.conf.beat_schedule = {
         "task": f"{SHORT_NAME}.prune_indicator_snapshots",
         "schedule": crontab_ist(2, 30, day_of_week="*"),
         "options": {"queue": MAINTENANCE},
+    },
+    # Swing analysis and the technical snapshot: after the close, and a refresh before the open (plan: "Time (IST)").
+    "daily_snapshot": {
+        "task": f"{SHORT_NAME}.daily_snapshot",
+        "schedule": crontab_ist(16, 0),
+        "options": {"queue": SWING},
+    },
+    "morning_snapshot": {
+        "task": f"{SHORT_NAME}.morning_snapshot",
+        "schedule": crontab_ist(8, 0),
+        "options": {"queue": SWING},
     },
 }
 SNAPSHOT_RETENTION = timedelta(days=14)
@@ -77,3 +93,38 @@ async def _prune() -> int:
 def prune_indicator_snapshots() -> int:
     """Delete audit rows older than 14 days. Idempotent: running it twice deletes nothing the second time."""
     return asyncio.run(_prune())
+
+
+RETRY_DELAY_SECONDS = 600
+MAX_RETRIES = 3
+
+
+def _swing_run(task: Task[..., object], kind: Kind) -> dict[str, object]:
+    try:
+        summary = asyncio.run(run_job(settings, kind))
+    except IncompleteRun as exc:
+        # Too many stocks failed to load, so nothing was published. Try again a little later: the run is idempotent.
+        raise task.retry(exc=exc, countdown=RETRY_DELAY_SECONDS, max_retries=MAX_RETRIES) from exc
+    return {
+        "kind": summary.kind,
+        "as_of": summary.as_of.isoformat() if summary.as_of else None,
+        "skipped": summary.skipped,
+        "snapshots_new": summary.snapshots_new,
+        "snapshots_unchanged": summary.snapshots_unchanged,
+        "setups_new": summary.setups_new,
+        "failed": len(summary.failed),
+        "seconds": summary.seconds,
+    }
+
+
+@celery.task(name=f"{SHORT_NAME}.daily_snapshot", queue=SWING, bind=True)
+def daily_snapshot(self: Task[..., object]) -> dict[str, object]:
+    """16:00 IST: the snapshot of every stock as of today's close, and the swing setups. Idempotent: a repeat finds
+    every snapshot and setup already stored and announces nothing."""
+    return _swing_run(self, "close")
+
+
+@celery.task(name=f"{SHORT_NAME}.morning_snapshot", queue=SWING, bind=True)
+def morning_snapshot(self: Task[..., object]) -> dict[str, object]:
+    """08:00 IST: the snapshots as of the previous close again; only a stock whose numbers changed is announced."""
+    return _swing_run(self, "morning")
