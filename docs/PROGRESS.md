@@ -10,7 +10,7 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 | TE1 Market feed integration | Built, tested against a fake feed over `httpx.MockTransport` and a real Redis (no real feed or Kite). `candle.closed`, `feed.status` and `universe.published` consumers; typed history client with cursor paging; Parquet research cache (write-through at warm-up); warm-up at start, 09:00 IST and after an outage; evaluation suspended while the feed is unhealthy. |
 | TE2 Indicator library | Built. EMA/SMA, ATR, ADX, RSI, Supertrend, session VWAP and bands, classic/Camarilla pivots, CPR, opening range, volume average, relative strength; batch and streaming forms agree over a year of data; EMA/ATR/ADX/RSI match TA-Lib to 1e-6 (TA-Lib is a test-only dependency). Live `IndicatorEngine` (rebuilds on any non-append change), `indicator_snapshot` table (14-day retention, pruned 02:30 IST), `GET /v1/indicators/{isin}`. |
 | TE3 Intraday strategy engine | Built. The five strategies (`ema_9_21_crossover`, `vwap_breakout`, `orb_15m`, `pivot_supertrend`, `vwap_pivot`), long and short, as pure rules over a context; parameters and `params_version` in `config/strategies.yaml`; entry windows (09:30-14:30 IST, ORB to 11:30) and per-strategy cooldowns (30 min; ORB once a session); cooldown checkpoint in Redis; candidates stored in `signal_candidate` and announced as `signal.candidate.v1` through the outbox; `GET /v1/signals`, `/v1/signals/{id}`, `/v1/strategies`. A replayed or restarted session gives identical candidates (tested). Not done: gate 3 (chart review of 10 recorded sessions) needs real recorded sessions. |
-| TE4 Market context | Not started |
+| TE4 Market context | Built, with one gap. Breadth over the universe (advancing/declining/unchanged against the previous close), data quality from the feed's health, CPR day class, index states (VWAP side, 15-minute trend) and the VIX change, published as `market.context.v1` every 5 minutes from 09:15 to 15:30 IST (once per boundary, stored in `market_context`); `GET /v1/context` and `/v1/context/history`. **The market feed has no index or VIX data**, so index states, VIX and CPR class are empty/null until an `IndexSource` exists; the code and tests for them run on fake index data. Exit criterion (5 sessions on time, matched by hand) needs live sessions. |
 | TE5 to TE8 | Out of scope for the current build (TE5 needs the broker cost figures) |
 
 ## Decisions
@@ -48,9 +48,21 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 - `strategy_params` (listed in the plan) is not a table: the parameter file is the source, its version is stored on every candidate, and
   the history is git's.
 
+- **Market context** is built in the signal worker's supervise loop (15 s tick): at a boundary plus 15 s it builds, stores (one row per
+  `context_at`, so two processes or a restart publish once) and queues the event. A feed that is not healthy still gets a context, with
+  `data_quality: degraded`; so does a configured index source that fails. Breadth counts only stocks with a candle today and a previous session.
+- **`IndexSource` is the seam** (`context/index_source.py`): index candles (5m, 15m, previous day) and the VIX reading. `NoIndexSource` is
+  the default; the pure functions in `context/compute.py` are tested on hand numbers. Index trend 15m = Supertrend(10,3) and EMA 9/21 agree
+  beyond a 0.05% band, else sideways. CPR class from the previous day's CPR width % of the primary index (nifty_50, else the first):
+  narrow below 0.25, wide above 0.5 (settings `cpr_narrow_pct`, `cpr_wide_pct`; starting values, no source for them in the plan).
+  The class is fixed at 09:15 and kept for the day. The strategy filter `vwap_pivot.require_index` reads the same index state.
+
 ## Open items
 
-- **No index or VIX in the market feed contract.** TE4 needs index/sector state and the VIX; the feed publishes stock candles only. See TE4.
+- **No index or VIX in the market feed contract (blocks the index half of TE4 and `vwap_pivot`'s index filter).** Options: the feed adds index
+  and VIX instruments (a contract change, then an `IndexSource` over its REST API), or this service gets its own source. Not decided; not done
+  here because the feed is another repository and a second Kite client is forbidden.
+- Gate 3 (chart review of 10 recorded sessions) and the TE4 exit criterion need recorded sessions; the replay tests use synthetic ones.
 
 - **The kit's NSE holiday file ships empty.** `TradingCalendar.load()` raises `CalendarUnknown` for 2026, so the supervisor cannot
   warm anything until the owner fills `nse_holidays.json` (or `TBO_NSE_HOLIDAYS_FILE`) from NSE's circular. Tests use their own calendar.

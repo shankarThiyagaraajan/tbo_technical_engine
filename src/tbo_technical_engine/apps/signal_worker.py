@@ -24,7 +24,9 @@ from tbo_platform_kit.metrics import Metrics
 
 from tbo_technical_engine.clients import fundamental, market_feed
 from tbo_technical_engine.consumers.handlers import candle_consumer, feed_consumer, universe_consumer
+from tbo_technical_engine.context.index_source import IndexSource
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
+from tbo_technical_engine.services.context_service import ContextService
 from tbo_technical_engine.services.cooldowns import CooldownStore
 from tbo_technical_engine.services.evaluator import StrategyEvaluator
 from tbo_technical_engine.services.indicator_engine import IndicatorEngine
@@ -55,6 +57,7 @@ class SignalWorker:
         funds: fundamental.FundamentalClient,
         metrics: Metrics | None = None,
         calendar: TradingCalendar | None = None,
+        index_source: IndexSource | None = None,
     ) -> None:
         self.settings = settings
         self.funds = funds
@@ -87,6 +90,19 @@ class SignalWorker:
         self.ingest.evaluators.append(IndicatorRecorder(self.engine, sessions, now_utc))
         self.evaluator = StrategyEvaluator(self.engine, self.buffer, load_strategies(settings.strategies_file))
         publisher = EventPublisher(redis, profile, source=REPOSITORY, metrics=metrics)
+        self.context = ContextService(
+            self.buffer,
+            self.universe,
+            self.readiness,
+            sessions,
+            publisher,
+            calendar,
+            now_utc,
+            source=index_source,
+            narrow_pct=settings.cpr_narrow_pct,
+            wide_pct=settings.cpr_wide_pct,
+        )
+        self.evaluator.index_side = self.context.index_side
         self.ingest.evaluators.append(
             SignalRunner(self.evaluator, sessions, publisher, CooldownStore(redis, profile), now_utc)
         )
@@ -114,6 +130,7 @@ class SignalWorker:
             try:
                 await self.ensure_universe(now_utc().astimezone(IST).date())
                 await self.supervisor.tick()
+                await self.context.tick()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # one bad tick must not end the worker

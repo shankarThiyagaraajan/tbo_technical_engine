@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import JSON, Column, DateTime, Index, Integer, Numeric, String, Table, Text
+from sqlalchemy import JSON, Column, Date, DateTime, Index, Integer, Numeric, String, Table, Text
 from tbo_platform_kit.db import component_metadata
 
 from tbo_technical_engine.settings import SHORT_NAME
@@ -61,3 +61,14 @@ signal_candidate = Table(
 )
 Index("ix_signal_candidate_created", signal_candidate.c.created_at.desc(), signal_candidate.c.signal_id.desc())
 Index("ix_signal_candidate_isin", signal_candidate.c.isin, signal_candidate.c.created_at.desc())
+
+# The market context every 5 minutes (one row per boundary: 09:15, 09:20, ... 15:30 IST).
+market_context = Table(
+    "market_context",
+    metadata,
+    Column("context_at", DateTime(timezone=True), primary_key=True),
+    Column("trade_date", Date, nullable=False),
+    Column("data", JSON, nullable=False),
+    Column("data_quality", String(10), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)

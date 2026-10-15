@@ -29,3 +29,7 @@ class Settings(ComponentSettings, short_name=SHORT_NAME, repository=REPOSITORY):
     """A closed candle older than this when it arrives is stored but not evaluated (late entries are not entries)."""
     strategies_file: Path = Path("config/strategies.yaml")
     """The strategy parameters (`config/strategies.yaml`); read at start, and a bad file stops the process."""
+    cpr_narrow_pct: float = 0.25
+    """A previous-session CPR narrower than this percent of its pivot makes the day `narrow` (trend day likely)."""
+    cpr_wide_pct: float = 0.5
+    """Wider than this: `wide` (range day likely). Starting values, to be tuned by the backtest."""
