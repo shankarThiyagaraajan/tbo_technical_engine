@@ -53,7 +53,7 @@ async def test_one_row_redis_refuses_does_not_block_the_outbox(app: Any, redis: 
     from sqlalchemy import select
 
     from tbo_technical_engine import outbox
-    from tbo_technical_engine.tables import outbox as outbox_table
+    from tbo_technical_engine.store.tables import outbox as outbox_table
 
     publisher = app.state.publisher
     good = publisher.build(

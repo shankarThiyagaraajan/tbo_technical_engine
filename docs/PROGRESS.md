@@ -68,3 +68,12 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   warm anything until the owner fills `nse_holidays.json` (or `TBO_NSE_HOLIDAYS_FILE`) from NSE's circular. Tests use their own calendar.
 - No `deploy/services/tbo_technical_engine.yml` in tbo_platform yet (env: `TBO_TECHNICAL_MARKET_FEED_URL`, `..._FUNDAMENTAL_URL`, Redis ACL
   read access to `tbo.market_feed.*` and `tbo.fundamental.universe`).
+
+## Code standards pass (2026-10-15, branch `claude/code-standards`)
+
+- `settings.py` moved to `config/settings.py` and `tables.py` to `store/tables.py` (imports updated; no behaviour change).
+- Docstrings that say why added across every package; `Any` removed where a real type exists (`**params: float`,
+  `Redis`, `Row[Any]`, `CursorResult`). Left as `Any`, each with a reason: `CooldownStore.redis` (redis stubs cannot be
+  awaited under strict mypy), JSON event/response dicts, and the Celery/FastAPI state objects.
+- Dataclasses (`WarmupSpec`, `Bars`, `Context`, `IndexSeries`, ...) stay beside the logic that owns them; only pydantic
+  models live in `schemas/`.

@@ -11,11 +11,14 @@ from tbo_technical_engine.indicators.base import NAN, Indicator, Stream, full
 
 
 def _rsi(avg_gain: float, avg_loss: float) -> float:
+    """RSI from Wilder-smoothed average gain and loss; 0 when both are zero (a flat series has no strength)."""
     total = avg_gain + avg_loss
     return 100.0 * (avg_gain / total) if total != 0 else 0.0
 
 
 class Rsi(Indicator):
+    """Wilder's RSI, seeded with the simple mean of the first `period` changes as TA-Lib does."""
+
     def __init__(self, period: int = 14) -> None:
         if period < 2:
             raise ValueError("period must be at least 2")
@@ -50,6 +53,8 @@ class Rsi(Indicator):
 
 
 class _RsiStream:
+    """Live form of Rsi: collects the first `period` changes, then smooths one bar at a time."""
+
     def __init__(self, spec: Rsi) -> None:
         self.spec = spec
         self.prev = NAN

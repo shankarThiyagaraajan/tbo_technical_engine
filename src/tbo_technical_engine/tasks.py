@@ -15,7 +15,7 @@ from tbo_platform_kit.db import create_engine, session_factory
 from tbo_platform_kit.events import EventPublisher
 
 from tbo_technical_engine import outbox
-from tbo_technical_engine.settings import REPOSITORY, SHORT_NAME, Settings
+from tbo_technical_engine.config.settings import REPOSITORY, SHORT_NAME, Settings
 from tbo_technical_engine.store import indicators as indicator_store
 
 settings = Settings()

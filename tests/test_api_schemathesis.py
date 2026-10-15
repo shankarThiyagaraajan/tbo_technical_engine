@@ -28,7 +28,7 @@ from schemathesis.specs.openapi.checks import (
 from tbo_platform_kit.testing import TestKeys
 
 from tbo_technical_engine.app import build_app
-from tbo_technical_engine.settings import REPOSITORY, SHORT_NAME, Settings
+from tbo_technical_engine.config.settings import REPOSITORY, SHORT_NAME, Settings
 
 ROOT = Path(__file__).resolve().parents[1]
 

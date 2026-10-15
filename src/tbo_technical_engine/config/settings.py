@@ -16,6 +16,9 @@ SHORT_NAME = "technical"
 
 
 class Settings(ComponentSettings, short_name=SHORT_NAME, repository=REPOSITORY):
+    """This component's configuration. A field `x` is read from `TBO_TECHNICAL_X`; the string under each says what it
+    is."""
+
     contract_file: Path = Path("contract/openapi.json")
     """The bundled contract this service serves at GET /openapi.json (scripts/vendor_contract.sh writes it)."""
 

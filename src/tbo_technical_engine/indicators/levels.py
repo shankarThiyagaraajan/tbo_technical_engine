@@ -30,6 +30,7 @@ Hlc = tuple[float, float, float]
 
 
 def classic_pivots(h: float, low: float, c: float) -> dict[str, float]:
+    """Classic floor-trader pivots from the previous session's high, low and close."""
     p = (h + low + c) / 3.0
     rng = h - low
     return {
@@ -44,6 +45,8 @@ def classic_pivots(h: float, low: float, c: float) -> dict[str, float]:
 
 
 def camarilla_pivots(h: float, low: float, c: float) -> dict[str, float]:
+    """Camarilla levels R1-R4 / S1-S4: the close plus or minus 1.1 x range / (12, 6, 4, 2). R3/S3 are the usual reversal
+    levels, R4/S4 the breakout levels."""
     rng = h - low
     out: dict[str, float] = {}
     for i, divisor in enumerate((12.0, 6.0, 4.0, 2.0), start=1):
@@ -53,6 +56,8 @@ def camarilla_pivots(h: float, low: float, c: float) -> dict[str, float]:
 
 
 def cpr(h: float, low: float, c: float) -> dict[str, float]:
+    """The central pivot range: pivot, bottom and top central pivots and the range's width in percent of the pivot (a
+    narrow CPR hints at a trend day)."""
     p = (h + low + c) / 3.0
     bc = (h + low) / 2.0
     tc = 2 * p - bc
@@ -82,6 +87,9 @@ def previous_session_hlc(bars: Bars) -> tuple[F64, F64, F64]:
 
 
 class _SessionLevels(Indicator):
+    """Base of the previous-session level indicators: subclasses name the outputs (`names`) and the formula (`kind`);
+    the batch and live forms are shared."""
+
     kind: Callable[[float, float, float], dict[str, float]]
     names: tuple[str, ...]
 
@@ -112,6 +120,8 @@ class _SessionLevels(Indicator):
 
 
 class _LevelsStream:
+    """Live form: tracks the running session's high, low and close; recomputes the levels when a session starts."""
+
     def __init__(self, spec: _SessionLevels) -> None:
         self.spec = spec
         self.session = -1
@@ -131,21 +141,29 @@ class _LevelsStream:
 
 
 class Pivots(_SessionLevels):
+    """Classic pivots of the previous session."""
+
     kind = staticmethod(classic_pivots)
     names = ("pivot_p", "pivot_r1", "pivot_r2", "pivot_r3", "pivot_s1", "pivot_s2", "pivot_s3")
 
 
 class Camarilla(_SessionLevels):
+    """Camarilla pivots of the previous session."""
+
     kind = staticmethod(camarilla_pivots)
     names = tuple(f"cam_{side}{i}" for side in ("r", "s") for i in (1, 2, 3, 4))
 
 
 class Cpr(_SessionLevels):
+    """CPR of the previous session."""
+
     kind = staticmethod(cpr)
     names = ("cpr_pivot", "cpr_bc", "cpr_tc", "cpr_top", "cpr_bottom", "cpr_width_pct")
 
 
 class OpeningRange(Indicator):
+    """High, low, middle and height of the first `minutes` of the session; nan until the window has fully closed."""
+
     def __init__(self, minutes: int = 15, timeframe_minutes: int = 5) -> None:
         if minutes <= 0 or minutes % timeframe_minutes:
             raise ValueError("the range must be a whole number of bars")
@@ -192,6 +210,8 @@ class OpeningRange(Indicator):
 
 
 class _OrStream:
+    """Live form: accumulates the window's high and low, publishing them once the window's last bar has closed."""
+
     def __init__(self, spec: OpeningRange) -> None:
         self.spec = spec
         self.session = -1

@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from tbo_technical_engine.apps.signal_worker import SignalWorker
-from tbo_technical_engine.settings import Settings
+from tbo_technical_engine.config.settings import Settings
 from tests.support import CALENDAR, ISIN_A, FakeFeed, fundamental_client
 
 TODAY = date(2026, 10, 15)

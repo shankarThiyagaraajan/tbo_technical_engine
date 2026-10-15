@@ -23,6 +23,7 @@ from tbo_platform_kit.logging import configure_logging, get_logger
 from tbo_platform_kit.metrics import Metrics
 
 from tbo_technical_engine.clients import fundamental, market_feed
+from tbo_technical_engine.config.settings import REPOSITORY, Settings
 from tbo_technical_engine.consumers.handlers import candle_consumer, feed_consumer, universe_consumer
 from tbo_technical_engine.context.index_source import IndexSource
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
@@ -38,7 +39,6 @@ from tbo_technical_engine.services.strategy_loader import load_strategies
 from tbo_technical_engine.services.supervisor import WarmupSupervisor
 from tbo_technical_engine.services.universe import UniverseHolder
 from tbo_technical_engine.services.warmup import WarmupSpec
-from tbo_technical_engine.settings import REPOSITORY, Settings
 from tbo_technical_engine.store.research_cache import ResearchCache
 
 log = get_logger(__name__)
@@ -126,6 +126,8 @@ class SignalWorker:
             self.universe.offer(fetched)
 
     async def supervise(self, stop: asyncio.Event) -> None:
+        """The 15-second loop: make sure a universe is known, then warm-up/readiness and the market-context boundary.
+        A failing tick is logged and the loop goes on; only a stop request or cancellation ends it."""
         while not stop.is_set():
             try:
                 await self.ensure_universe(now_utc().astimezone(IST).date())
@@ -139,6 +141,7 @@ class SignalWorker:
                 await asyncio.wait_for(stop.wait(), TICK_SECONDS)
 
     async def run(self, stop: asyncio.Event) -> None:
+        """Run the three stream consumers and the supervisor until `stop` is set, then wait for them to finish."""
         log.info("signal_worker_started", mode=self.settings.profile.mode.value)
         tasks = [asyncio.create_task(c.run(stop)) for c in self.consumers] + [asyncio.create_task(self.supervise(stop))]
         await stop.wait()
@@ -148,6 +151,7 @@ class SignalWorker:
 
 
 async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
+    """Build the worker from settings and run it until `stop`; every connection it opened is closed on the way out."""
     settings = settings or Settings()
     settings.require("database_url", "redis_url", "market_feed_url", "fundamental_url")
     assert settings.redis_url is not None
@@ -181,6 +185,7 @@ async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
 
 
 def main() -> None:
+    """Process entry point: logging, SIGTERM/SIGINT turn into a clean stop (the container's stop signal is SIGTERM)."""
     settings = Settings()
     configure_logging(
         service=settings.short_name,

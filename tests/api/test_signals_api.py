@@ -8,7 +8,7 @@ import pytest
 from tbo_contracts import validate
 from tbo_platform_kit.testing import TestKeys
 
-from tbo_technical_engine.settings import REPOSITORY
+from tbo_technical_engine.config.settings import REPOSITORY
 from tbo_technical_engine.store import signals as store
 from tests.store.test_signal_store import ID, START, candidate
 from tests.support import ISIN_A

@@ -31,10 +31,14 @@ COLUMNS: dict[str, pl.DataType | type[pl.DataType]] = {
 
 
 class ResearchCache:
+    """Parquet files of candles, one per (timeframe, stock), for research and backtests. The service never reads it to
+    decide a live signal."""
+
     def __init__(self, root: Path) -> None:
         self.root = root
 
     def path(self, isin: str, timeframe: str) -> Path:
+        """Where the file for a series lives (it may not exist yet)."""
         return self.root / timeframe / f"{isin}.parquet"
 
     def read(self, isin: str, timeframe: str) -> pl.DataFrame:
@@ -45,6 +49,7 @@ class ResearchCache:
         return pl.read_parquet(file)
 
     def last_start(self, isin: str, timeframe: str) -> datetime | None:
+        """Start time of the newest cached candle, or None when nothing is cached."""
         frame = self.read(isin, timeframe)
         if frame.is_empty():
             return None

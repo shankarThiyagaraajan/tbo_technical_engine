@@ -21,10 +21,13 @@ from tbo_technical_engine.indicators.base import NAN, Indicator, Stream, full
 
 
 def _k(multiplier: float) -> str:
+    """A band multiplier as it appears in an output name: `1.5` -> `1p5` (a dot would not survive as a field name)."""
     return f"{multiplier:g}".replace(".", "p")
 
 
 class Vwap(Indicator):
+    """Session VWAP (resets each IST trading day) with volume-weighted standard-deviation bands."""
+
     def __init__(self, band_multipliers: tuple[float, ...] = (1.0, 2.0)) -> None:
         self.multipliers = band_multipliers
         self.vwap = "vwap"
@@ -67,6 +70,8 @@ class Vwap(Indicator):
 
 
 class _VwapStream:
+    """Live form of Vwap: running sums reset when the session changes."""
+
     def __init__(self, spec: Vwap) -> None:
         self.spec = spec
         self.session = -1

@@ -11,7 +11,6 @@ same thing everywhere (the API, the candidates and the backtester):
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 from tbo_technical_engine.indicators.base import Indicator
 from tbo_technical_engine.indicators.levels import Camarilla, Cpr, OpeningRange, Pivots
@@ -40,7 +39,7 @@ CATALOGUE: dict[str, Callable[..., Indicator]] = {
 }
 
 
-def get(name: str, **params: Any) -> Indicator:
+def get(name: str, **params: float) -> Indicator:
     """The indicator called `name` with `params`; ValueError for an unknown name or an unusable parameter."""
     try:
         factory = CATALOGUE[name]

@@ -21,7 +21,7 @@ from tbo_contracts import validate_event
 from tbo_platform_kit.events import EventPublisher, stream_of
 from tbo_platform_kit.logging import get_logger
 
-from tbo_technical_engine.tables import outbox
+from tbo_technical_engine.store.tables import outbox
 
 log = get_logger(__name__)
 BATCH = 100

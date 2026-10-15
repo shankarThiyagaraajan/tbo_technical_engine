@@ -6,10 +6,12 @@ import uvicorn
 from tbo_platform_kit.logging import configure_logging
 
 from tbo_technical_engine.app import build_app
-from tbo_technical_engine.settings import Settings
+from tbo_technical_engine.config.settings import Settings
 
 
 def main() -> None:
+    """Serve the API. Binds all interfaces because the container's port is reachable only on the stack's internal
+    network."""
     settings = Settings()
     configure_logging(
         service=settings.short_name,

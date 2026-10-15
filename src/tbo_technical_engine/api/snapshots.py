@@ -13,14 +13,17 @@ router = APIRouter()
 
 @router.get("/v1/snapshots")
 async def list_snapshots(caller: Claims = requires("technical:read")) -> None:
+    """TE6 stub (501)."""
     raise not_implemented("TE6")
 
 
 @router.get("/v1/snapshots/{isin}")
 async def get_snapshot(isin: str, caller: Claims = requires("technical:read")) -> None:
+    """TE6 stub (501)."""
     raise not_implemented("TE6")
 
 
 @router.get("/v1/swing-setups")
 async def list_swing_setups(caller: Claims = requires("technical:read")) -> None:
+    """TE6 stub (501)."""
     raise not_implemented("TE6")
