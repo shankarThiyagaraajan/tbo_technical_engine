@@ -9,7 +9,7 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 | TE0 Repository foundation | Built (branch `claude/technical-te0-te4-1mrk0g`). Generated from the tbo_platform service template at `bfaaabf`; the contract is vendored (`v1.2.0`); all 12 operations are protected stubs answering 501; Celery with the outbox sweep; research queue guarded by the kit's mode blackout; signal worker skeleton. Checked locally only (CI did not run). |
 | TE1 Market feed integration | Built, tested against a fake feed over `httpx.MockTransport` and a real Redis (no real feed or Kite). `candle.closed`, `feed.status` and `universe.published` consumers; typed history client with cursor paging; Parquet research cache (write-through at warm-up); warm-up at start, 09:00 IST and after an outage; evaluation suspended while the feed is unhealthy. |
 | TE2 Indicator library | Built. EMA/SMA, ATR, ADX, RSI, Supertrend, session VWAP and bands, classic/Camarilla pivots, CPR, opening range, volume average, relative strength; batch and streaming forms agree over a year of data; EMA/ATR/ADX/RSI match TA-Lib to 1e-6 (TA-Lib is a test-only dependency). Live `IndicatorEngine` (rebuilds on any non-append change), `indicator_snapshot` table (14-day retention, pruned 02:30 IST), `GET /v1/indicators/{isin}`. |
-| TE3 Intraday strategy engine | Not started |
+| TE3 Intraday strategy engine | Built. The five strategies (`ema_9_21_crossover`, `vwap_breakout`, `orb_15m`, `pivot_supertrend`, `vwap_pivot`), long and short, as pure rules over a context; parameters and `params_version` in `config/strategies.yaml`; entry windows (09:30-14:30 IST, ORB to 11:30) and per-strategy cooldowns (30 min; ORB once a session); cooldown checkpoint in Redis; candidates stored in `signal_candidate` and announced as `signal.candidate.v1` through the outbox; `GET /v1/signals`, `/v1/signals/{id}`, `/v1/strategies`. A replayed or restarted session gives identical candidates (tested). Not done: gate 3 (chart review of 10 recorded sessions) needs real recorded sessions. |
 | TE4 Market context | Not started |
 | TE5 to TE8 | Out of scope for the current build (TE5 needs the broker cost figures) |
 
@@ -31,7 +31,26 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   15-minute candle closing at the same instant has arrived cannot change a result (live, replay and backtest agree).
 - The candle stream group starts at `$` (history comes from REST); feed status and universe groups start at `0`.
 
+- **Strategies are pure rules over a context** (`strategies/base.py`): the last 8 five-minute rows with their indicator values, the 15-minute
+  indicators as of the entry candle's start, the daily ATR, today's candles and the previous close. They keep no state, so a restart, a
+  replay and a backtest agree; the only state is the cooldown (`StrategyEvaluator.fired`, checkpointed in Redis, restored per stock).
+- **A candidate's ID is derived** from (stock, strategy, side, candle), as a valid ULID whose time part is the candle close. A redelivered
+  candle gives the same ID and the database refuses the copy, so no duplicate event is queued. The cooldown moves only after the write.
+- Prices are rounded to the 0.05 tick the safe way: a buy's entry zone widens, its stop moves away and its targets nearer; sells mirror.
+  A draft whose stop, zone and targets are not in order after rounding is dropped.
+- Choices where the plan is silent (all in `config/strategies.yaml`, tunable only through the backtest): the entry zone is the close plus
+  0.1 ATR on the trade side; VWAP breakout and the EMA crossover take the *nearer* of their two stops; ORB targets are measured from the
+  entry, not the range edge; T2 of the pivot-aimed strategies is at least 0.5 R beyond T1; a pivot closer than 0.5 R is no target.
+- A filter that cannot be checked blocks the signal (ORB without a daily ATR or previous close; Pivot + Supertrend without the 15-minute
+  trend). "Prefer the first retest within 3 bars" (VWAP breakout) is not a condition.
+- **`vwap_pivot`'s "index on the same side of its VWAP" is off** (`require_index: false`): the feed has no index data (see open items). When
+  an index source exists the context carries `index_side` and the component is recorded; switching the parameter on makes it required.
+- `strategy_params` (listed in the plan) is not a table: the parameter file is the source, its version is stored on every candidate, and
+  the history is git's.
+
 ## Open items
+
+- **No index or VIX in the market feed contract.** TE4 needs index/sector state and the VIX; the feed publishes stock candles only. See TE4.
 
 - **The kit's NSE holiday file ships empty.** `TradingCalendar.load()` raises `CalendarUnknown` for 2026, so the supervisor cannot
   warm anything until the owner fills `nse_holidays.json` (or `TBO_NSE_HOLIDAYS_FILE`) from NSE's circular. Tests use their own calendar.

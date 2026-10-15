@@ -104,5 +104,7 @@ async def sessions(app: Any) -> AsyncIterator[Any]:
     """The app's session factory, with this component's tables emptied."""
     factory = app.state.sessions
     async with factory() as session, session.begin():
-        await session.execute(text(f"TRUNCATE {SHORT_NAME}.indicator_snapshot, {SHORT_NAME}.outbox"))
+        await session.execute(
+            text(f"TRUNCATE {SHORT_NAME}.indicator_snapshot, {SHORT_NAME}.signal_candidate, {SHORT_NAME}.outbox")
+        )
     return factory

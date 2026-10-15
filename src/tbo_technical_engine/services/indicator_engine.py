@@ -13,10 +13,12 @@ stopped agree.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from tbo_technical_engine import indicators
-from tbo_technical_engine.indicators.bars import Bars, bar_of
+from tbo_technical_engine.indicators.bars import bar_of
 from tbo_technical_engine.indicators.suite import Suite, SuiteStream
 from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
@@ -55,6 +57,11 @@ def default_suites() -> dict[str, Suite]:
     }
 
 
+TAIL = 8
+"""Rows kept per series for `recent`: the strategies look back at most this many bars (a crossover, a few bars below
+VWAP, a five-bar swing low)."""
+
+
 @dataclass
 class _State:
     stream: SuiteStream
@@ -62,25 +69,40 @@ class _State:
     count: int
     first: Candle
     values: dict[str, float] = field(default_factory=dict)
+    tail: deque[tuple[Candle, dict[str, float]]] = field(default_factory=lambda: deque(maxlen=TAIL))
 
 
 class IndicatorEngine:
     def __init__(self, buffer: CandleBuffer, suites: dict[str, Suite] | None = None) -> None:
         self.buffer = buffer
         self.suites = suites or default_suites()
-        self._state: dict[tuple[str, str], _State] = {}
+        self._state: dict[tuple[str, str, str], _State] = {}
 
     def values(self, isin: str, timeframe: str) -> tuple[Candle, dict[str, float]] | None:
         """The values at the buffer's newest candle of `timeframe`, or None when there are no candles / no suite."""
+        state = self._sync((isin, timeframe, ""), timeframe, self.buffer.series(isin, timeframe))
+        return None if state is None else (state.last, state.values)
+
+    def recent(self, isin: str, timeframe: str) -> list[tuple[Candle, dict[str, float]]]:
+        """The last `TAIL` candles with the values at each of them, oldest first (empty without candles)."""
+        state = self._sync((isin, timeframe, ""), timeframe, self.buffer.series(isin, timeframe))
+        return [] if state is None else list(state.tail)
+
+    def values_asof(self, isin: str, timeframe: str, cutoff: datetime) -> tuple[Candle, dict[str, float]] | None:
+        """The values at the newest `timeframe` candle that had closed by `cutoff`: a slower timeframe as the entry
+        candle saw it, whether or not a later candle has arrived since (live, replay and backtest then agree)."""
+        series = self.buffer.before(isin, timeframe, cutoff)
+        state = self._sync((isin, timeframe, "asof"), timeframe, series)
+        return None if state is None else (state.last, state.values)
+
+    def _sync(self, key: tuple[str, str, str], timeframe: str, series: list[Candle]) -> _State | None:
         suite = self.suites.get(timeframe)
-        series = self.buffer.series(isin, timeframe)
         if suite is None or not series:
             return None
-        key = (isin, timeframe)
         state = self._state.get(key)
         newest = series[-1]
         if state is not None and state.last == newest and len(series) == state.count and series[0] == state.first:
-            return state.last, state.values
+            return state
         if (
             state is not None
             and len(series) >= 2
@@ -89,13 +111,20 @@ class IndicatorEngine:
             and len(series) in (state.count, state.count + 1)
         ):
             state.values = state.stream.update(bar_of(newest))
+            state.tail.append((newest, dict(state.values)))
             state.last = newest
             state.count = len(series)
             state.first = series[0]
-            return newest, state.values
-        stream, values = suite.replay(Bars.from_candles(series))
-        self._state[key] = _State(stream, newest, len(series), series[0], values)
-        return newest, values
+            return state
+        stream = suite.stream()
+        tail: deque[tuple[Candle, dict[str, float]]] = deque(maxlen=TAIL)
+        values: dict[str, float] = {}
+        for candle in series:
+            values = stream.update(bar_of(candle))
+            tail.append((candle, dict(values)))
+        state = _State(stream, newest, len(series), series[0], values, tail)
+        self._state[key] = state
+        return state
 
     def forget(self, isins: set[str] | frozenset[str]) -> None:
         for key in [k for k in self._state if k[0] in isins]:

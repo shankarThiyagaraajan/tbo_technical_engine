@@ -28,7 +28,7 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pyt
 
 `src/tbo_technical_engine/`: `api/` routes (`stub.py` = 501 answers, removed as phases land) · `schemas/` pydantic (requests,
 internal records) · `clients/` (market feed, fundamental engine) · `consumers/` (`candle.closed`, `feed.status`) ·
-`indicators/` · `strategies/` · `context/` · `services/` · `store/` · `utils/` · `apps/` (process entry points:
+`indicators/` · `strategies/` (the five rules) · `context/` · `services/` (evaluator, signal runner, cooldowns) · `store/` · `utils/` · `apps/` (process entry points:
 `signal_worker`) · `tasks.py` (Celery) · `main.py` (api). `config/` holds `strategies.yaml`. `tests/` mirrors the package.
 
 ## CI is not run

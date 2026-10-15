@@ -1,0 +1,81 @@
+# Intraday strategy parameters. Every value is a starting value from the plan, tuned only through the backtest harness
+# (TE5). A change to any value is a new `params_version`: the version is stored on every candidate it produced.
+# Fractions are decimal strings (the contract's Strategy.params allows strings, integers and booleans only).
+# Times are IST and refer to the time the entry candle CLOSES (a candle that starts 09:25 closes 09:30).
+params_version: "2026.10.1"
+active_from_at: "2026-10-15T00:00:00Z"
+
+strategies:
+  ema_9_21_crossover:
+    title: 9/21 EMA crossover
+    timeframe: 5m
+    is_active: true
+    params:
+      entry_from: "09:30"
+      entry_until: "14:30"
+      cooldown_minutes: 30
+      entry_zone_atr: "0.1"        # the entry zone reaches this many ATR beyond the close
+      adx_min: "20"
+      swing_bars: 5                # the stop is the swing extreme of this many bars, or 1 ATR, whichever is nearer
+      stop_atr: "1"
+      target_1_r: "1.5"
+      target_2_r: "2.5"
+
+  vwap_breakout:
+    title: VWAP breakout
+    timeframe: 5m
+    is_active: true
+    params:
+      entry_from: "09:30"
+      entry_until: "14:30"
+      cooldown_minutes: 30
+      entry_zone_atr: "0.1"
+      bars_below: 3                # bars on the other side of VWAP right before the breakout candle
+      volume_ratio_min: "1.5"      # against the 20-bar average (current bar excluded)
+      stop_atr: "0.5"              # stop: breakout candle extreme, or VWAP -/+ this many ATR, whichever is nearer
+      target_2_r: "2"
+      target_2_min_gap_r: "0.5"    # T2 is at least this many R beyond T1
+      target_1_min_r: "0.5"        # no signal when the next pivot is closer than this many R
+
+  orb_15m:
+    title: 15-minute opening range breakout
+    timeframe: 5m
+    is_active: true
+    params:
+      entry_from: "09:30"
+      entry_until: "11:30"
+      cooldown_minutes: 390        # at most one signal per direction per session
+      entry_zone_atr: "0.1"
+      volume_ratio_min: "1.5"
+      max_range_daily_atr: "1"     # skip when the range is wider than this many daily ATR
+      narrow_range_pct: "0.4"      # a range narrower than this % of its midpoint uses the range low/high as the stop
+      gap_skip_pct: "2"            # skip a gap larger than this % unless the 15-minute trend agrees with it
+      target_1_range: "1"
+      target_2_range: "2"
+
+  pivot_supertrend:
+    title: Pivot with Supertrend
+    timeframe: 5m
+    is_active: true
+    params:
+      entry_from: "09:30"
+      entry_until: "14:30"
+      cooldown_minutes: 30
+      entry_zone_atr: "0.1"
+      min_room_pct: "0.2"          # no entry within this % of the next resistance (support, for a short)
+
+  vwap_pivot:
+    title: VWAP with pivot confluence
+    timeframe: 5m
+    is_active: true
+    params:
+      entry_from: "09:30"
+      entry_until: "14:30"
+      cooldown_minutes: 30
+      entry_zone_atr: "0.1"
+      confluence_pct: "0.25"       # VWAP and a pivot level this close (% of VWAP) form a zone
+      stop_atr: "0.25"
+      target_2_r: "2"
+      target_2_min_gap_r: "0.5"
+      target_1_min_r: "0.5"
+      require_index: false         # needs an index source (the feed has none yet); see docs/PROGRESS.md

@@ -13,6 +13,7 @@ dependencies = [
   "tbo-contracts>=1.1,<2",
   "numpy~=2.2.0",
   "polars~=1.44.0",
+  "pyyaml>=6,<7",
 ]
 
 [project.scripts]
@@ -27,6 +28,7 @@ dev = [
   "schemathesis>=4.3,<5",
   "celery-types>=0.23",
   "ta-lib>=0.6,<1",
+  "types-pyyaml>=6,<7",
 ]
 
 [tool.uv.sources]

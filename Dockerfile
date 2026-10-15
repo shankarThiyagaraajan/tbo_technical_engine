@@ -35,6 +35,7 @@ RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app
 COPY --from=build /opt/venv /opt/venv
 WORKDIR /app
 COPY contract contract
+COPY config config
 COPY alembic.ini alembic.ini
 COPY migrations migrations
 ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1

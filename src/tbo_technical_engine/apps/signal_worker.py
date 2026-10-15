@@ -1,8 +1,8 @@
 """The signal worker process: `uv run python -m tbo_technical_engine.apps.signal_worker`.
 
 One process handles the whole universe (plan: "one signal worker at the planned scale"). It runs three consumers
-(candles, feed health, universe) and a supervisor that warms the buffer from REST history. Strategies join in TE3
-through `CandleIngest.evaluators`; until then candles are only stored.
+(candles, feed health, universe) and a supervisor that warms the buffer from REST history. Every evaluated candle
+goes to the indicator recorder, then to the strategies (`SignalRunner`).
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tbo_platform_kit.calendar import IST, TradingCalendar, now_utc
 from tbo_platform_kit.db import create_engine, session_factory
+from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.http_client import IssuerTokenProvider, ServiceClient, UpstreamUnavailable
 from tbo_platform_kit.logging import configure_logging, get_logger
 from tbo_platform_kit.metrics import Metrics
@@ -24,14 +25,18 @@ from tbo_platform_kit.metrics import Metrics
 from tbo_technical_engine.clients import fundamental, market_feed
 from tbo_technical_engine.consumers.handlers import candle_consumer, feed_consumer, universe_consumer
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
+from tbo_technical_engine.services.cooldowns import CooldownStore
+from tbo_technical_engine.services.evaluator import StrategyEvaluator
 from tbo_technical_engine.services.indicator_engine import IndicatorEngine
 from tbo_technical_engine.services.ingest import CandleIngest
 from tbo_technical_engine.services.readiness import Readiness
 from tbo_technical_engine.services.recorder import IndicatorRecorder
+from tbo_technical_engine.services.signal_runner import SignalRunner
+from tbo_technical_engine.services.strategy_loader import load_strategies
 from tbo_technical_engine.services.supervisor import WarmupSupervisor
 from tbo_technical_engine.services.universe import UniverseHolder
 from tbo_technical_engine.services.warmup import WarmupSpec
-from tbo_technical_engine.settings import Settings
+from tbo_technical_engine.settings import REPOSITORY, Settings
 from tbo_technical_engine.store.research_cache import ResearchCache
 
 log = get_logger(__name__)
@@ -80,6 +85,11 @@ class SignalWorker:
         profile = settings.profile
         self.engine = IndicatorEngine(self.buffer)
         self.ingest.evaluators.append(IndicatorRecorder(self.engine, sessions, now_utc))
+        self.evaluator = StrategyEvaluator(self.engine, self.buffer, load_strategies(settings.strategies_file))
+        publisher = EventPublisher(redis, profile, source=REPOSITORY, metrics=metrics)
+        self.ingest.evaluators.append(
+            SignalRunner(self.evaluator, sessions, publisher, CooldownStore(redis, profile), now_utc)
+        )
         self.consumers = [
             candle_consumer(redis, profile, self.ingest, name, metrics),
             feed_consumer(redis, profile, self.readiness, name, metrics),

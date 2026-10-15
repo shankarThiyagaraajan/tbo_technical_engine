@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import JSON, Column, DateTime, Index, Integer, String, Table, Text
+from sqlalchemy import JSON, Column, DateTime, Index, Integer, Numeric, String, Table, Text
 from tbo_platform_kit.db import component_metadata
 
 from tbo_technical_engine.settings import SHORT_NAME
@@ -36,3 +36,28 @@ indicator_snapshot = Table(
     Column("backend", String(10), nullable=False),
     Column("computed_at", DateTime(timezone=True), nullable=False),
 )
+
+# Every candidate emitted. The ID is derived from (isin, strategy, side, candle), so the same candle evaluated twice
+# cannot be stored twice.
+signal_candidate = Table(
+    "signal_candidate",
+    metadata,
+    Column("signal_id", String(26), primary_key=True),
+    Column("isin", String(12), nullable=False),
+    Column("strategy", String(60), nullable=False),
+    Column("side", String(4), nullable=False),
+    Column("timeframe", String(4), nullable=False),
+    Column("candle_start_at", DateTime(timezone=True), nullable=False),
+    Column("entry_low", Numeric(14, 2), nullable=False),
+    Column("entry_high", Numeric(14, 2), nullable=False),
+    Column("stop", Numeric(14, 2), nullable=False),
+    Column("target_1", Numeric(14, 2), nullable=False),
+    Column("target_2", Numeric(14, 2), nullable=False),
+    Column("strength", Numeric(5, 4), nullable=False),
+    Column("components", JSON, nullable=False),
+    Column("indicator_values", JSON, nullable=False),
+    Column("params_version", String(40), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+Index("ix_signal_candidate_created", signal_candidate.c.created_at.desc(), signal_candidate.c.signal_id.desc())
+Index("ix_signal_candidate_isin", signal_candidate.c.isin, signal_candidate.c.created_at.desc())
