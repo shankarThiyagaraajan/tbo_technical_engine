@@ -1,0 +1,11 @@
+# Changes here will be overwritten by Copier; never edit it by hand.
+_commit: bfaaabf
+_src_path: https://github.com/shankarThiyagaraajan/tbo_platform
+contract_name: tbo_technical_engine
+contracts_ref: v1.2.0
+description: Turns market-feed candles into trade candidates, market context and technical
+    snapshots.
+platform_ref: bfaaabf54981055950ae03bad9ed14c384c83c9c
+repository: tbo_technical_engine
+sample: false
+short_name: technical

@@ -1,0 +1,20 @@
+# Manual-only while GitHub Actions minutes are exhausted: run it from Actions -> Run workflow.
+# Normal triggers, to restore when minutes return:
+#   push: {branches: [main], tags: ["v*"]}   and   pull_request
+# CI is tbo_platform's reusable workflow, pinned to the template's release: lint, types, tests against real
+# PostgreSQL and Redis, Schemathesis, the contract check, the image build and a Trivy scan; a v* tag also
+# publishes the image and a GitHub release.
+name: CI
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ci:
+    uses: shankarThiyagaraajan/tbo_platform/.github/workflows/python-service.yml@bfaaabf54981055950ae03bad9ed14c384c83c9c
+    permissions:
+      contents: write
+      packages: write
+    secrets:
+      # A fine-grained token with read access to tbo_platform and tbo_contracts (private git dependencies).
+      TBO_READ_TOKEN: ${{ secrets.TBO_READ_TOKEN }}

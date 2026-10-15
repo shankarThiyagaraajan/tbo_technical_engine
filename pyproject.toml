@@ -1,0 +1,64 @@
+[build-system]
+# uv's own build backend (uv is the only Python tool); it builds src/<module>.
+requires = ["uv_build>=0.11.32,<0.12"]
+build-backend = "uv_build"
+
+[project]
+name = "tbo-technical-engine"
+version = "0.1.0"
+description = "Turns market-feed candles into trade candidates, market context and technical snapshots."
+requires-python = ">=3.12"
+dependencies = [
+  "tbo-platform-kit[sentry]~=1.0",
+  "tbo-contracts>=1.1,<2",
+]
+
+[project.scripts]
+tbo-technical-engine = "tbo_technical_engine.main:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<1",
+  "ruff==0.11.8",
+  "mypy==1.15.0",
+  "schemathesis>=4.3,<5",
+  "celery-types>=0.23",
+]
+
+[tool.uv.sources]
+tbo-platform-kit = { git = "https://github.com/shankarThiyagaraajan/tbo_platform", rev = "bfaaabf54981055950ae03bad9ed14c384c83c9c", subdirectory = "packages/tbo_platform_kit" }
+tbo-contracts = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts", tag = "v1.2.0" }
+
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+# CI checks the pinned tbo_contracts out into .tbo_contracts; it is that repository's code, not this one's.
+extend-exclude = [".tbo_contracts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "SIM", "RUF", "ASYNC", "PT"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "PT011", "PT018"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["tbo_platform_kit.http_server.requires", "fastapi.Header", "fastapi.Depends", "fastapi.Query"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+plugins = ["pydantic.mypy"]
+
+[tool.uv]
+# The kit's own sources pin tbo_contracts v1.1.0; this service needs v1.2.0 (the technical contract bundles, and the
+# catalogue has not_implemented). Drop the override when the kit moves to v1.2.0 or later.
+override-dependencies = ["tbo-contracts @ git+https://github.com/shankarThiyagaraajan/tbo_contracts@v1.2.0"]

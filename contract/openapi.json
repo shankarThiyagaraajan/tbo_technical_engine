@@ -1,0 +1,2811 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "tbo_technical_engine",
+    "version": "1.0.0",
+    "description": "Indicators, intraday signal candidates, the market context, the daily technical snapshot, swing setups, the strategies in force and the backtest harness."
+  },
+  "servers": [
+    {
+      "url": "http://technical.tbo.internal"
+    }
+  ],
+  "tags": [
+    {
+      "name": "health",
+      "description": "Liveness and readiness, the same on every service."
+    },
+    {
+      "name": "signals",
+      "description": "Indicators and signal candidates."
+    },
+    {
+      "name": "context",
+      "description": "The market context and the daily snapshot."
+    },
+    {
+      "name": "research",
+      "description": "Strategies and backtests."
+    }
+  ],
+  "x-tbo-common-errors": {
+    "401": {
+      "$ref": "#/components/responses/Unauthorized"
+    },
+    "403": {
+      "$ref": "#/components/responses/Forbidden"
+    },
+    "429": {
+      "$ref": "#/components/responses/RateLimited"
+    }
+  },
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "get_health_live",
+        "summary": "The process is running",
+        "tags": [
+          "health"
+        ],
+        "x-tbo-public": true,
+        "x-tbo-consumers": [
+          "tbo_platform"
+        ],
+        "x-tbo-timeout-ms": 200,
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/HealthOk"
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "get_health_ready",
+        "summary": "The database and Redis are reachable",
+        "tags": [
+          "health"
+        ],
+        "x-tbo-public": true,
+        "x-tbo-consumers": [
+          "tbo_platform"
+        ],
+        "x-tbo-timeout-ms": 1000,
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/HealthOk"
+          },
+          "503": {
+            "$ref": "#/components/responses/NotReady"
+          }
+        }
+      }
+    },
+    "/v1/indicators/{isin}": {
+      "get": {
+        "operationId": "get_indicators",
+        "summary": "Latest indicator values for a stock",
+        "description": "At the last evaluated closed candle of the timeframe. 404 if the stock is not in the universe.",
+        "tags": [
+          "signals"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:read"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "tbo_decision_engine",
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 300,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IsinPath"
+          },
+          {
+            "name": "timeframe",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Timeframe",
+              "default": "5m"
+            }
+          },
+          {
+            "name": "names",
+            "in": "query",
+            "description": "Only these indicators (comma-separated); all when left out.",
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "maxItems": 30,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+                "maxLength": 40
+              }
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "The indicator values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Indicatorset"
+                },
+                "example": {
+                  "isin": "INE002A01018",
+                  "timeframe": "5m",
+                  "candle_start_at": "2026-10-15T04:55:00Z",
+                  "values": {
+                    "ema_9": "1247.20",
+                    "ema_21": "1243.85",
+                    "vwap": "1244.10",
+                    "adx_14": "24.6",
+                    "atr_14": "6.35"
+                  },
+                  "backend": "numpy",
+                  "computed_at": "2026-10-15T05:00:01Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/v1/signals": {
+      "get": {
+        "operationId": "list_signals",
+        "summary": "Signal candidates, newest first",
+        "description": "Ordered by created_at descending, then signal_id. Without date, today (IST).",
+        "tags": [
+          "signals"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:read"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "tbo_decision_engine",
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 1000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/TradeDate"
+          },
+          {
+            "name": "isin",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ISIN"
+            }
+          },
+          {
+            "name": "strategy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+              "maxLength": 60
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "One page of candidates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalPage"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "signal_id": "01JA8ZQ3W7K4N2C9V5T6B1M30A",
+                      "isin": "INE002A01018",
+                      "strategy": "pivot_supertrend",
+                      "side": "buy",
+                      "timeframe": "5m",
+                      "candle_start_at": "2026-10-15T04:55:00Z",
+                      "entry_low": "1245.00",
+                      "entry_high": "1248.00",
+                      "stop": "1236.00",
+                      "target_1": "1262.00",
+                      "target_2": "1275.00",
+                      "strength": "0.72",
+                      "components": [
+                        {
+                          "name": "supertrend_15m_green",
+                          "is_met": true,
+                          "value": "1238.40"
+                        },
+                        {
+                          "name": "close_above_r1",
+                          "is_met": true,
+                          "value": "1246.50"
+                        }
+                      ],
+                      "indicator_values": {
+                        "supertrend_10_3": "1238.40",
+                        "pivot_r1": "1246.50",
+                        "vwap": "1244.10"
+                      },
+                      "params_version": "2026.10.1",
+                      "created_at": "2026-10-15T05:00:01Z"
+                    }
+                  ],
+                  "next_cursor": null
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/v1/signals/{signal_id}": {
+      "get": {
+        "operationId": "get_signal",
+        "summary": "One candidate with levels and the indicator values that triggered it",
+        "tags": [
+          "signals"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:read"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "tbo_decision_engine",
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 300,
+        "parameters": [
+          {
+            "name": "signal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ULID"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "The candidate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Signalcandidate"
+                },
+                "example": {
+                  "signal_id": "01JA8ZQ3W7K4N2C9V5T6B1M30A",
+                  "isin": "INE002A01018",
+                  "strategy": "pivot_supertrend",
+                  "side": "buy",
+                  "timeframe": "5m",
+                  "candle_start_at": "2026-10-15T04:55:00Z",
+                  "entry_low": "1245.00",
+                  "entry_high": "1248.00",
+                  "stop": "1236.00",
+                  "target_1": "1262.00",
+                  "target_2": "1275.00",
+                  "strength": "0.72",
+                  "components": [
+                    {
+                      "name": "supertrend_15m_green",
+                      "is_met": true,
+                      "value": "1238.40"
+                    },
+                    {
+                      "name": "close_above_r1",
+                      "is_met": true,
+                      "value": "1246.50"
+                    }
+                  ],
+                  "indicator_values": {
+                    "supertrend_10_3": "1238.40",
+                    "pivot_r1": "1246.50",
+                    "vwap": "1244.10"
+                  },
+                  "params_version": "2026.10.1",
+                  "created_at": "2026-10-15T05:00:01Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v1/context": {
+      "get": {
+        "operationId": "get_context",
+        "summary": "The latest market context",
+        "description": "The most recent 5-minute context, which may be the previous session's before 09:15 IST.",
+        "tags": [
+          "context"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:read"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "tbo_decision_engine",
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 300,
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "The market context.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Marketcontext"
+                },
+                "example": {
+                  "context_at": "2026-10-15T05:00:00Z",
+                  "trade_date": "2026-10-15",
+                  "index_states": [
+                    {
+                      "index_code": "nifty_50",
+                      "last_price": "25120.35",
+                      "vwap": "25088.10",
+                      "is_above_vwap": true,
+                      "trend_15m": "up"
+                    },
+                    {
+                      "index_code": "nifty_bank",
+                      "last_price": "53210.80",
+                      "vwap": "53300.00",
+                      "is_above_vwap": false,
+                      "trend_15m": "sideways"
+                    }
+                  ],
+                  "vix": {
+                    "level": "12.85",
+                    "change_pct": "-2.10"
+                  },
+                  "breadth": {
+                    "advancing": 182,
+                    "declining": 104,
+                    "unchanged": 14
+                  },
+                  "cpr_class": "narrow",
+                  "data_quality": "ok"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v1/context/history": {
+      "get": {
+        "operationId": "list_context_history",
+        "summary": "The market context over time",
+        "description": "Ordered by context_at. Without from and to, today's session (IST).",
+        "tags": [
+          "context"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:read"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "tbo_decision_engine",
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 1000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/From"
+          },
+          {
+            "$ref": "#/components/parameters/To"
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "One page of contexts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextPage"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "context_at": "2026-10-15T05:00:00Z",
+                      "trade_date": "2026-10-15",
+                      "index_states": [
+                        {
+                          "index_code": "nifty_50",
+                          "last_price": "25120.35",
+                          "vwap": "25088.10",
+                          "is_above_vwap": true,
+                          "trend_15m": "up"
+                        },
+                        {
+                          "index_code": "nifty_bank",
+                          "last_price": "53210.80",
+                          "vwap": "53300.00",
+                          "is_above_vwap": false,
+                          "trend_15m": "sideways"
+                        }
+                      ],
+                      "vix": {
+                        "level": "12.85",
+                        "change_pct": "-2.10"
+                      },
+                      "breadth": {
+                        "advancing": 182,
+                        "declining": 104,
+                        "unchanged": 14
+                      },
+                      "cpr_class": "narrow",
+                      "data_quality": "ok"
+                    }
+                  ],
+                  "next_cursor": null
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/v1/snapshots": {
+      "get": {
+        "operationId": "list_snapshots",
+        "summary": "The daily technical snapshot of every universe stock",
+        "description": "Ordered by isin. date is the trade date the snapshot serves: the snapshot built after the previous session's close (as_of_date). Without date, the latest.",
+        "tags": [
+          "context"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:read"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "tbo_decision_engine",
+          "tbo_fundamental_engine",
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 1000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/TradeDate"
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "One page of snapshots.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotPage"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "isin": "INE002A01018",
+                      "as_of_date": "2026-10-14",
+                      "trend_state": "up",
+                      "trend_score": 71,
+                      "rs_percentile": 84,
+                      "return_20d_pct": "6.40",
+                      "return_60d_pct": "11.25",
+                      "levels": [
+                        {
+                          "kind": "support",
+                          "low": "1228.00",
+                          "high": "1234.50",
+                          "source": "swing_cluster"
+                        },
+                        {
+                          "kind": "resistance",
+                          "low": "1268.00",
+                          "high": "1272.00",
+                          "source": "prior_month_high"
+                        }
+                      ],
+                      "atr_pct": "1.85",
+                      "atr_pct_percentile": 42,
+                      "vol_regime": "normal",
+                      "is_squeeze": false,
+                      "avg_turnover_20d": "8420000000.00",
+                      "spread_est_pct": "0.03",
+                      "computed_at": "2026-10-14T10:30:00Z"
+                    }
+                  ],
+                  "next_cursor": null
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/v1/snapshots/{isin}": {
+      "get": {
+        "operationId": "get_snapshot",
+        "summary": "One stock's daily technical snapshot",
+        "tags": [
+          "context"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:read"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "tbo_decision_engine",
+          "tbo_fundamental_engine",
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 300,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IsinPath"
+          },
+          {
+            "$ref": "#/components/parameters/TradeDate"
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "The snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Technicalsnapshot"
+                },
+                "example": {
+                  "isin": "INE002A01018",
+                  "as_of_date": "2026-10-14",
+                  "trend_state": "up",
+                  "trend_score": 71,
+                  "rs_percentile": 84,
+                  "return_20d_pct": "6.40",
+                  "return_60d_pct": "11.25",
+                  "levels": [
+                    {
+                      "kind": "support",
+                      "low": "1228.00",
+                      "high": "1234.50",
+                      "source": "swing_cluster"
+                    },
+                    {
+                      "kind": "resistance",
+                      "low": "1268.00",
+                      "high": "1272.00",
+                      "source": "prior_month_high"
+                    }
+                  ],
+                  "atr_pct": "1.85",
+                  "atr_pct_percentile": 42,
+                  "vol_regime": "normal",
+                  "is_squeeze": false,
+                  "avg_turnover_20d": "8420000000.00",
+                  "spread_est_pct": "0.03",
+                  "computed_at": "2026-10-14T10:30:00Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/v1/swing-setups": {
+      "get": {
+        "operationId": "list_swing_setups",
+        "summary": "Multi-day setups",
+        "description": "Ordered by isin. date is the session they were found after (setup_date); without it, the latest.",
+        "tags": [
+          "context"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:read"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "tbo_decision_engine",
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 1000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/TradeDate"
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "One page of setups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwingSetupPage"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "setup_id": "01JA8ZQ3W7K4N2C9V5T6B1M31A",
+                      "isin": "INE002A01018",
+                      "setup_date": "2026-10-14",
+                      "setup_type": "base_breakout",
+                      "side": "buy",
+                      "entry": "1272.50",
+                      "stop": "1228.00",
+                      "target_1": "1340.00",
+                      "target_2": "1395.00",
+                      "valid_until_date": "2026-10-17",
+                      "params_version": "2026.10.1",
+                      "created_at": "2026-10-14T10:40:00Z"
+                    }
+                  ],
+                  "next_cursor": null
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/v1/strategies": {
+      "get": {
+        "operationId": "list_strategies",
+        "summary": "Strategies and their parameter versions",
+        "description": "Every strategy, active ones first; a short, unpaged list.",
+        "tags": [
+          "research"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:read"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "tbo_decision_engine",
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 300,
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "The strategies.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyList"
+                },
+                "example": {
+                  "strategies": [
+                    {
+                      "strategy": "pivot_supertrend",
+                      "title": "Pivot + Supertrend",
+                      "kind": "intraday",
+                      "timeframe": "5m",
+                      "is_active": true,
+                      "params_version": "2026.10.1",
+                      "params": {
+                        "supertrend_period": 10,
+                        "supertrend_multiplier": "3",
+                        "trend_timeframe": "15m",
+                        "resistance_buffer_pct": "0.2"
+                      },
+                      "active_from_at": "2026-10-01T00:00:00Z"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/backtests": {
+      "post": {
+        "operationId": "create_backtest",
+        "summary": "Start a backtest",
+        "description": "Queues a run over [from_date, to_date] against point-in-time data (each day's universe and gate). Poll GET /v1/backtests/{backtest_id}.",
+        "tags": [
+          "research"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:research"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 1000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacktestCreate"
+              },
+              "example": {
+                "strategy": "vwap_breakout",
+                "params_version": "2026.10.1",
+                "params_overrides": [
+                  {
+                    "name": "volume_multiple",
+                    "value": "1.8"
+                  }
+                ],
+                "from_date": "2025-10-01",
+                "to_date": "2026-09-30",
+                "isins": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "202": {
+            "description": "The backtest was queued.",
+            "headers": {
+              "Location": {
+                "description": "The backtest's URL.",
+                "schema": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Backtest"
+                },
+                "example": {
+                  "backtest_id": "01JA8ZQ3W7K4N2C9V5T6B1M32A",
+                  "status": "queued",
+                  "strategy": "vwap_breakout",
+                  "params_version": "2026.10.1",
+                  "params_overrides": [
+                    {
+                      "name": "volume_multiple",
+                      "value": "1.8"
+                    }
+                  ],
+                  "from_date": "2025-10-01",
+                  "to_date": "2026-09-30",
+                  "isins": [],
+                  "metrics": null,
+                  "code_version": "1.4.0",
+                  "backend": "vectorbt",
+                  "error": null,
+                  "created_at": "2026-10-15T06:00:00Z",
+                  "started_at": null,
+                  "finished_at": null
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    },
+    "/v1/backtests/{backtest_id}": {
+      "get": {
+        "operationId": "get_backtest",
+        "summary": "Backtest status and metrics",
+        "tags": [
+          "research"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:research"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 300,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BacktestIdPath"
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "The backtest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Backtest"
+                },
+                "example": {
+                  "backtest_id": "01JA8ZQ3W7K4N2C9V5T6B1M32A",
+                  "status": "succeeded",
+                  "strategy": "vwap_breakout",
+                  "params_version": "2026.10.1",
+                  "params_overrides": [
+                    {
+                      "name": "volume_multiple",
+                      "value": "1.8"
+                    }
+                  ],
+                  "from_date": "2025-10-01",
+                  "to_date": "2026-09-30",
+                  "isins": [],
+                  "metrics": {
+                    "trade_count": 412,
+                    "win_rate_pct": "47.3",
+                    "avg_r": "0.21",
+                    "expectancy_r": "0.21",
+                    "max_drawdown_r": "-9.5",
+                    "profit_factor": "1.38"
+                  },
+                  "code_version": "1.4.0",
+                  "backend": "vectorbt",
+                  "error": null,
+                  "created_at": "2026-10-15T06:00:00Z",
+                  "started_at": "2026-10-15T06:00:02Z",
+                  "finished_at": "2026-10-15T06:07:40Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v1/backtests/{backtest_id}/trades": {
+      "get": {
+        "operationId": "list_backtest_trades",
+        "summary": "The trades of a backtest",
+        "description": "Ordered by trade_no. Empty until the backtest has succeeded.",
+        "tags": [
+          "research"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:research"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "owner_admin_tools"
+        ],
+        "x-tbo-timeout-ms": 1000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BacktestIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "One page of trades.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestTradePage"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "backtest_id": "01JA8ZQ3W7K4N2C9V5T6B1M32A",
+                      "trade_no": 1,
+                      "isin": "INE002A01018",
+                      "side": "buy",
+                      "entry_at": "2025-10-01T04:20:00Z",
+                      "exit_at": "2025-10-01T06:05:00Z",
+                      "entry_price": "1180.40",
+                      "exit_price": "1198.20",
+                      "exit_reason": "target_2",
+                      "r_multiple": "2.5"
+                    }
+                  ],
+                  "next_cursor": null
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationFailed"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "headers": {
+      "RetryAfter": {
+        "description": "Seconds to wait before retrying.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "parameters": {
+      "BacktestIdPath": {
+        "name": "backtest_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/ULID"
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "description": "The next_cursor of the previous page; omit for the first page.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "From": {
+        "name": "from",
+        "in": "query",
+        "description": "Start of the range, inclusive (RFC 3339 UTC). Ranges are half-open [from, to).",
+        "schema": {
+          "$ref": "#/components/schemas/Timestamp"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "A new ULID per logical request. The same key with the same body returns the same response for 24 hours; with a different body, 409 idempotency_key_reused.",
+        "schema": {
+          "$ref": "#/components/schemas/ULID"
+        }
+      },
+      "IsinPath": {
+        "name": "isin",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "$ref": "#/components/schemas/ISIN"
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "description": "Most items to return.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 100
+        }
+      },
+      "To": {
+        "name": "to",
+        "in": "query",
+        "description": "End of the range, exclusive (RFC 3339 UTC).",
+        "schema": {
+          "$ref": "#/components/schemas/Timestamp"
+        }
+      },
+      "TradeDate": {
+        "name": "date",
+        "in": "query",
+        "description": "The trade date; default today (IST) or the latest, as each operation says.",
+        "schema": {
+          "$ref": "#/components/schemas/Date"
+        }
+      }
+    },
+    "responses": {
+      "Conflict": {
+        "description": "Conflict with the current state, or an Idempotency-Key reused with a different body.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            },
+            "example": {
+              "type": "https://tbo.internal/problems/idempotency_key_reused",
+              "title": "Idempotency key reused with a different request",
+              "status": 409,
+              "code": "idempotency_key_reused"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The token lacks the scope (forbidden).",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            },
+            "example": {
+              "type": "https://tbo.internal/problems/forbidden",
+              "title": "Missing scope",
+              "status": 403,
+              "detail": "This operation needs template:admin.",
+              "code": "forbidden"
+            }
+          }
+        }
+      },
+      "HealthOk": {
+        "description": "Healthy.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HealthStatus"
+            },
+            "example": {
+              "status": "ok"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No such resource (not_found).",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            },
+            "example": {
+              "type": "https://tbo.internal/problems/not_found",
+              "title": "Resource not found",
+              "status": 404,
+              "detail": "No widget 01JA8ZQ3W7K4N2C9V5T6B1M0XD.",
+              "code": "not_found"
+            }
+          }
+        }
+      },
+      "NotReady": {
+        "description": "Not ready (not_ready); the body says which dependency is missing.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            },
+            "example": {
+              "type": "https://tbo.internal/problems/not_ready",
+              "title": "Service not ready",
+              "status": 503,
+              "detail": "Redis is not reachable.",
+              "code": "not_ready"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Over the rate limit (rate_limited).",
+        "headers": {
+          "Retry-After": {
+            "$ref": "#/components/headers/RetryAfter"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            },
+            "example": {
+              "type": "https://tbo.internal/problems/rate_limited",
+              "title": "Too many requests",
+              "status": 429,
+              "code": "rate_limited"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "No valid service token (unauthenticated).",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            },
+            "example": {
+              "type": "https://tbo.internal/problems/unauthenticated",
+              "title": "Authentication required",
+              "status": 401,
+              "detail": "The service token has expired.",
+              "code": "unauthenticated"
+            }
+          }
+        }
+      },
+      "ValidationFailed": {
+        "description": "Some fields are invalid (validation_failed); errors lists each.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            },
+            "example": {
+              "type": "https://tbo.internal/problems/validation_failed",
+              "title": "Request validation failed",
+              "status": 422,
+              "code": "validation_failed",
+              "errors": [
+                {
+                  "field": "price",
+                  "message": "must be a decimal string with at most 2 decimals"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Backtest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Backtest",
+        "description": "A backtest run: queued by POST /v1/backtests, then running, then succeeded or failed. metrics is set once it succeeds. R is the initial risk (entry to stop) of a trade.",
+        "type": "object",
+        "required": [
+          "backtest_id",
+          "status",
+          "strategy",
+          "params_version",
+          "from_date",
+          "to_date",
+          "isins",
+          "metrics",
+          "code_version",
+          "backend",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "properties": {
+          "backtest_id": {
+            "$ref": "#/components/schemas/ULID"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "strategy": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+            "maxLength": 60
+          },
+          "params_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "The base parameter set; overrides from the request are in params_overrides."
+          },
+          "params_overrides": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "value"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+                  "maxLength": 60
+                },
+                "value": {
+                  "type": "string",
+                  "maxLength": 60
+                }
+              }
+            }
+          },
+          "from_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "to_date": {
+            "$ref": "#/components/schemas/Date",
+            "description": "Inclusive."
+          },
+          "isins": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/ISIN"
+            },
+            "description": "Empty means each day's universe (point in time, with that day's gate)."
+          },
+          "metrics": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "trade_count",
+              "win_rate_pct",
+              "avg_r",
+              "expectancy_r",
+              "max_drawdown_r",
+              "profit_factor"
+            ],
+            "properties": {
+              "trade_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "win_rate_pct": {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              "avg_r": {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              "expectancy_r": {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              "max_drawdown_r": {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              "profit_factor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Decimal"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Null when there were no losing trades."
+              }
+            }
+          },
+          "code_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "backend": {
+            "type": "string",
+            "enum": [
+              "numpy",
+              "numba",
+              "polars",
+              "vectorbt"
+            ],
+            "x-tbo-extensible": true
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "examples": [
+          {
+            "backtest_id": "01JA8ZQ3W7K4N2C9V5T6B1M32A",
+            "status": "succeeded",
+            "strategy": "vwap_breakout",
+            "params_version": "2026.10.1",
+            "params_overrides": [
+              {
+                "name": "volume_multiple",
+                "value": "1.8"
+              }
+            ],
+            "from_date": "2025-10-01",
+            "to_date": "2026-09-30",
+            "isins": [],
+            "metrics": {
+              "trade_count": 412,
+              "win_rate_pct": "47.3",
+              "avg_r": "0.21",
+              "expectancy_r": "0.21",
+              "max_drawdown_r": "-9.5",
+              "profit_factor": "1.38"
+            },
+            "code_version": "1.4.0",
+            "backend": "vectorbt",
+            "error": null,
+            "created_at": "2026-10-15T06:00:00Z",
+            "started_at": "2026-10-15T06:00:02Z",
+            "finished_at": "2026-10-15T06:07:40Z"
+          }
+        ]
+      },
+      "BacktestCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "strategy",
+          "from_date",
+          "to_date"
+        ],
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+            "maxLength": 60
+          },
+          "params_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "Default the strategy's current version."
+          },
+          "params_overrides": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "value"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+                  "maxLength": 60
+                },
+                "value": {
+                  "type": "string",
+                  "maxLength": 60
+                }
+              }
+            }
+          },
+          "from_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "to_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "isins": {
+            "type": "array",
+            "maxItems": 500,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/ISIN"
+            },
+            "description": "Empty or left out means each day's universe."
+          }
+        }
+      },
+      "BacktestTradePage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Backtesttrade"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Backtesttrade": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Backtest trade",
+        "description": "One simulated trade of a backtest, in entry order.",
+        "type": "object",
+        "required": [
+          "backtest_id",
+          "trade_no",
+          "isin",
+          "side",
+          "entry_at",
+          "exit_at",
+          "entry_price",
+          "exit_price",
+          "exit_reason",
+          "r_multiple"
+        ],
+        "properties": {
+          "backtest_id": {
+            "$ref": "#/components/schemas/ULID"
+          },
+          "trade_no": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "isin": {
+            "$ref": "#/components/schemas/ISIN"
+          },
+          "side": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "entry_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "exit_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "entry_price": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "exit_price": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "exit_reason": {
+            "type": "string",
+            "enum": [
+              "target_2",
+              "stop",
+              "stop_at_entry",
+              "time_exit",
+              "end_of_data"
+            ]
+          },
+          "r_multiple": {
+            "$ref": "#/components/schemas/Decimal"
+          }
+        },
+        "examples": [
+          {
+            "backtest_id": "01JA8ZQ3W7K4N2C9V5T6B1M32A",
+            "trade_no": 1,
+            "isin": "INE002A01018",
+            "side": "buy",
+            "entry_at": "2025-10-01T04:20:00Z",
+            "exit_at": "2025-10-01T06:05:00Z",
+            "entry_price": "1180.40",
+            "exit_price": "1198.20",
+            "exit_reason": "target_2",
+            "r_multiple": "2.5"
+          }
+        ]
+      },
+      "ContextPage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Marketcontext"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Date": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Date",
+        "description": "A calendar date, ISO 8601 (YYYY-MM-DD). Trading dates are dates in India (IST).",
+        "type": "string",
+        "format": "date",
+        "minLength": 10,
+        "maxLength": 10,
+        "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+        "examples": [
+          "2026-10-15"
+        ]
+      },
+      "Decimal": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Decimal",
+        "description": "An exact decimal number as a string: an optional minus sign, up to 18 digits before the point and up to 8 after. Used for any fraction that is not a price or money (ratios, scores, percentages with a _pct field name). Never a JSON number.",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 28,
+        "pattern": "^-?(0|[1-9][0-9]{0,17})(\\.[0-9]{1,8})?$",
+        "examples": [
+          "-1.25",
+          "0.62",
+          "18.4"
+        ]
+      },
+      "HealthStatus": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ],
+            "description": "Always ok when the answer is 200."
+          }
+        }
+      },
+      "ISIN": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ISIN",
+        "description": "International Securities Identification Number of an Indian security: IN, nine letters or digits, a check digit. The stock key everywhere; exchange symbols are display-only. The check digit itself is not verified by the schema.",
+        "type": "string",
+        "minLength": 12,
+        "maxLength": 12,
+        "pattern": "^IN[A-Z0-9]{9}[0-9]$",
+        "examples": [
+          "INE002A01018"
+        ]
+      },
+      "Indicatorset": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Indicator set",
+        "description": "The latest indicator values of one stock on one timeframe, at the last evaluated closed candle. values is keyed by indicator name with its parameters (ema_9, ema_21, vwap, adx_14, atr_14, supertrend_10_3, ...); null while an indicator is still warming up.",
+        "type": "object",
+        "required": [
+          "isin",
+          "timeframe",
+          "candle_start_at",
+          "values",
+          "backend",
+          "computed_at"
+        ],
+        "properties": {
+          "isin": {
+            "$ref": "#/components/schemas/ISIN"
+          },
+          "timeframe": {
+            "$ref": "#/components/schemas/Timeframe"
+          },
+          "candle_start_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "values": {
+            "type": "object",
+            "maxProperties": 80,
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+              "maxLength": 40
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Decimal"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "backend": {
+            "type": "string",
+            "enum": [
+              "numpy",
+              "numba",
+              "polars"
+            ],
+            "x-tbo-extensible": true,
+            "description": "The implementation that computed them (they must agree; see the plan's equivalence suite)."
+          },
+          "computed_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "examples": [
+          {
+            "isin": "INE002A01018",
+            "timeframe": "5m",
+            "candle_start_at": "2026-10-15T04:55:00Z",
+            "values": {
+              "ema_9": "1247.20",
+              "ema_21": "1243.85",
+              "vwap": "1244.10",
+              "adx_14": "24.6",
+              "atr_14": "6.35"
+            },
+            "backend": "numpy",
+            "computed_at": "2026-10-15T05:00:01Z"
+          }
+        ]
+      },
+      "Marketcontext": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Market context",
+        "description": "The market every 5 minutes, and the data of tbo.technical.market.context.v1 (subject market): index states, India VIX, breadth in the universe and the day's class from the CPR width (set at 09:15 IST, null before). While the feed is unhealthy data_quality is degraded and the decision engine issues no new calls.",
+        "type": "object",
+        "required": [
+          "context_at",
+          "trade_date",
+          "index_states",
+          "vix",
+          "breadth",
+          "cpr_class",
+          "data_quality"
+        ],
+        "properties": {
+          "context_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "trade_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "index_states": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "required": [
+                "index_code",
+                "last_price",
+                "vwap",
+                "is_above_vwap",
+                "trend_15m"
+              ],
+              "properties": {
+                "index_code": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+                  "maxLength": 60,
+                  "description": "nifty_50, nifty_bank, nifty_it, ..."
+                },
+                "last_price": {
+                  "$ref": "#/components/schemas/Price"
+                },
+                "vwap": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Price"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_above_vwap": {
+                  "type": "boolean"
+                },
+                "trend_15m": {
+                  "type": "string",
+                  "enum": [
+                    "up",
+                    "down",
+                    "sideways"
+                  ]
+                }
+              }
+            }
+          },
+          "vix": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "level",
+              "change_pct"
+            ],
+            "properties": {
+              "level": {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              "change_pct": {
+                "$ref": "#/components/schemas/Decimal",
+                "description": "Change since the previous close, in percent."
+              }
+            }
+          },
+          "breadth": {
+            "type": "object",
+            "required": [
+              "advancing",
+              "declining",
+              "unchanged"
+            ],
+            "properties": {
+              "advancing": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "declining": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unchanged": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "cpr_class": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "narrow",
+              "normal",
+              "wide",
+              null
+            ],
+            "description": "narrow: a trend day is likely; wide: a range day is likely."
+          },
+          "data_quality": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "context_at": "2026-10-15T05:00:00Z",
+            "trade_date": "2026-10-15",
+            "index_states": [
+              {
+                "index_code": "nifty_50",
+                "last_price": "25120.35",
+                "vwap": "25088.10",
+                "is_above_vwap": true,
+                "trend_15m": "up"
+              },
+              {
+                "index_code": "nifty_bank",
+                "last_price": "53210.80",
+                "vwap": "53300.00",
+                "is_above_vwap": false,
+                "trend_15m": "sideways"
+              }
+            ],
+            "vix": {
+              "level": "12.85",
+              "change_pct": "-2.10"
+            },
+            "breadth": {
+              "advancing": 182,
+              "declining": 104,
+              "unchanged": 14
+            },
+            "cpr_class": "narrow",
+            "data_quality": "ok"
+          }
+        ]
+      },
+      "Money": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Money",
+        "description": "An amount of money in INR (unless a currency field says otherwise) as a decimal string with up to 2 decimal places. May be negative (a loss, a debit).",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 19,
+        "pattern": "^-?(0|[1-9][0-9]{0,14})(\\.[0-9]{1,2})?$",
+        "examples": [
+          "125000.00",
+          "-3420.75"
+        ]
+      },
+      "Page": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Page",
+        "description": "One page of a cursor-paginated list. Each list response combines this with its own item schema (allOf). next_cursor is null on the last page; pass it back as `cursor` for the next one.",
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 500,
+            "description": "At most `limit` items, in the list's documented stable order."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Opaque; null when there are no more items."
+          }
+        },
+        "examples": [
+          {
+            "items": [],
+            "next_cursor": null
+          }
+        ]
+      },
+      "Price": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Price",
+        "description": "A price per share in INR as a decimal string: not negative, up to 2 decimal places (the exchanges quote in paise). Order prices are on the tick grid; this schema does not check the tick.",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 15,
+        "pattern": "^(0|[1-9][0-9]{0,11})(\\.[0-9]{1,2})?$",
+        "examples": [
+          "1245.50",
+          "0.05"
+        ]
+      },
+      "Problem": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Problem",
+        "description": "An RFC 9457 problem (application/problem+json), the body of every 4xx and 5xx response. `code` and `type` come from standards/error-catalogue.yaml. Never contains stack traces, SQL, internal host names or secrets.",
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 200,
+            "pattern": "^https://tbo\\.internal/problems/[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+            "description": "https://tbo.internal/problems/<code>"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The catalogue's title for the code; the same for every occurrence."
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599,
+            "description": "The HTTP status, repeated in the body."
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "This occurrence, for a person to read."
+          },
+          "instance": {
+            "type": "string",
+            "format": "uri-reference",
+            "maxLength": 2000,
+            "description": "The request path this occurrence is about."
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+            "description": "The catalogue code: what a client switches on."
+          },
+          "errors": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Problemfielderror"
+            },
+            "description": "For validation_failed: every invalid field."
+          }
+        },
+        "examples": [
+          {
+            "type": "https://tbo.internal/problems/not_found",
+            "title": "Resource not found",
+            "status": 404,
+            "detail": "No widget 01JA8ZQ3W7K4N2C9V5T6B1M0XD.",
+            "instance": "/v1/widgets/01JA8ZQ3W7K4N2C9V5T6B1M0XD",
+            "code": "not_found"
+          }
+        ]
+      },
+      "Problemfielderror": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Problem field error",
+        "description": "One invalid field of a request, in a validation_failed problem.",
+        "type": "object",
+        "required": [
+          "field",
+          "message"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The field, as a dotted path (`items.0.price`) or a parameter name."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "What is wrong, for a person to read."
+          }
+        },
+        "examples": [
+          {
+            "field": "timeframe",
+            "message": "must be one of 1m, 5m, 15m, 60m, 1d, 1w"
+          }
+        ]
+      },
+      "Side": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Side",
+        "description": "Buy or sell.",
+        "type": "string",
+        "enum": [
+          "buy",
+          "sell"
+        ],
+        "examples": [
+          "buy"
+        ]
+      },
+      "SignalPage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Signalcandidate"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Signalcandidate": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Signal candidate",
+        "description": "A strategy fired on a closed candle, and the data of tbo.technical.signal.candidate.v1. A candidate is not a call: the decision engine scores it with the gate and the context first. side buy is a long entry, sell a short one. components are the strategy's conditions as evaluated; indicator_values the values that triggered it. params_version names the parameter set in config/strategies.yaml; a parameter change never changes this schema.",
+        "type": "object",
+        "required": [
+          "signal_id",
+          "isin",
+          "strategy",
+          "side",
+          "timeframe",
+          "candle_start_at",
+          "entry_low",
+          "entry_high",
+          "stop",
+          "target_1",
+          "target_2",
+          "strength",
+          "components",
+          "indicator_values",
+          "params_version",
+          "created_at"
+        ],
+        "properties": {
+          "signal_id": {
+            "$ref": "#/components/schemas/ULID"
+          },
+          "isin": {
+            "$ref": "#/components/schemas/ISIN"
+          },
+          "strategy": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+            "maxLength": 60,
+            "description": "ema_9_21_crossover, vwap_breakout, orb_15m, pivot_supertrend, vwap_pivot (GET /v1/strategies)."
+          },
+          "side": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "timeframe": {
+            "$ref": "#/components/schemas/Timeframe",
+            "description": "The entry timeframe."
+          },
+          "candle_start_at": {
+            "$ref": "#/components/schemas/Timestamp",
+            "description": "Start of the closed candle it fired on."
+          },
+          "entry_low": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "entry_high": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "stop": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "target_1": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "target_2": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "strength": {
+            "type": "string",
+            "pattern": "^(0(\\.[0-9]{1,4})?|1(\\.0{1,4})?)$",
+            "maxLength": 6,
+            "description": "From 0 to 1, as a decimal string."
+          },
+          "components": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "is_met",
+                "value"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+                  "maxLength": 60
+                },
+                "is_met": {
+                  "type": "boolean"
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Decimal"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "indicator_values": {
+            "type": "object",
+            "maxProperties": 80,
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+              "maxLength": 40
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Decimal"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "params_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "examples": [
+          {
+            "signal_id": "01JA8ZQ3W7K4N2C9V5T6B1M30A",
+            "isin": "INE002A01018",
+            "strategy": "pivot_supertrend",
+            "side": "buy",
+            "timeframe": "5m",
+            "candle_start_at": "2026-10-15T04:55:00Z",
+            "entry_low": "1245.00",
+            "entry_high": "1248.00",
+            "stop": "1236.00",
+            "target_1": "1262.00",
+            "target_2": "1275.00",
+            "strength": "0.72",
+            "components": [
+              {
+                "name": "supertrend_15m_green",
+                "is_met": true,
+                "value": "1238.40"
+              },
+              {
+                "name": "close_above_r1",
+                "is_met": true,
+                "value": "1246.50"
+              }
+            ],
+            "indicator_values": {
+              "supertrend_10_3": "1238.40",
+              "pivot_r1": "1246.50",
+              "vwap": "1244.10"
+            },
+            "params_version": "2026.10.1",
+            "created_at": "2026-10-15T05:00:01Z"
+          }
+        ]
+      },
+      "SnapshotPage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Technicalsnapshot"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Strategy": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Strategy",
+        "description": "An active or retired strategy and its current parameter set (config/strategies.yaml). Parameter values are strings, integers or booleans; fractions are decimal strings.",
+        "type": "object",
+        "required": [
+          "strategy",
+          "title",
+          "kind",
+          "timeframe",
+          "is_active",
+          "params_version",
+          "params",
+          "active_from_at"
+        ],
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+            "maxLength": 60
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "intraday",
+              "swing"
+            ]
+          },
+          "timeframe": {
+            "$ref": "#/components/schemas/Timeframe"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "params_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "params": {
+            "type": "object",
+            "maxProperties": 50,
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$",
+              "maxLength": 60
+            },
+            "additionalProperties": {
+              "type": [
+                "string",
+                "integer",
+                "boolean"
+              ]
+            }
+          },
+          "active_from_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "examples": [
+          {
+            "strategy": "pivot_supertrend",
+            "title": "Pivot + Supertrend",
+            "kind": "intraday",
+            "timeframe": "5m",
+            "is_active": true,
+            "params_version": "2026.10.1",
+            "params": {
+              "supertrend_period": 10,
+              "supertrend_multiplier": "3",
+              "trend_timeframe": "15m",
+              "resistance_buffer_pct": "0.2"
+            },
+            "active_from_at": "2026-10-01T00:00:00Z"
+          }
+        ]
+      },
+      "StrategyList": {
+        "type": "object",
+        "required": [
+          "strategies"
+        ],
+        "properties": {
+          "strategies": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/Strategy"
+            }
+          }
+        }
+      },
+      "SwingSetupPage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Page"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Swingsetup"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Swingsetup": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Swing setup",
+        "description": "A multi-day setup found after the close, and the data of tbo.technical.swing.setup.v1. Valid until the end of valid_until_date's session.",
+        "type": "object",
+        "required": [
+          "setup_id",
+          "isin",
+          "setup_date",
+          "setup_type",
+          "side",
+          "entry",
+          "stop",
+          "target_1",
+          "target_2",
+          "valid_until_date",
+          "params_version",
+          "created_at"
+        ],
+        "properties": {
+          "setup_id": {
+            "$ref": "#/components/schemas/ULID"
+          },
+          "isin": {
+            "$ref": "#/components/schemas/ISIN"
+          },
+          "setup_date": {
+            "$ref": "#/components/schemas/Date",
+            "description": "The session it was found after."
+          },
+          "setup_type": {
+            "type": "string",
+            "enum": [
+              "base_breakout",
+              "ema_pullback",
+              "week_52_high_breakout"
+            ],
+            "x-tbo-extensible": true
+          },
+          "side": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "entry": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "stop": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "target_1": {
+            "$ref": "#/components/schemas/Price"
+          },
+          "target_2": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Price"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "valid_until_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "params_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "examples": [
+          {
+            "setup_id": "01JA8ZQ3W7K4N2C9V5T6B1M31A",
+            "isin": "INE002A01018",
+            "setup_date": "2026-10-14",
+            "setup_type": "base_breakout",
+            "side": "buy",
+            "entry": "1272.50",
+            "stop": "1228.00",
+            "target_1": "1340.00",
+            "target_2": "1395.00",
+            "valid_until_date": "2026-10-17",
+            "params_version": "2026.10.1",
+            "created_at": "2026-10-14T10:40:00Z"
+          }
+        ]
+      },
+      "Technicalsnapshot": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Technical snapshot",
+        "description": "The daily multi-day view of one stock, and the data of tbo.technical.technical.snapshot.v1: built after the close (16:00 IST) and refreshed at 08:00 IST. as_of_date is the last session it uses. The liquidity fields feed the fundamental gate. Fields are only ever added.",
+        "type": "object",
+        "required": [
+          "isin",
+          "as_of_date",
+          "trend_state",
+          "trend_score",
+          "rs_percentile",
+          "return_20d_pct",
+          "return_60d_pct",
+          "levels",
+          "atr_pct",
+          "atr_pct_percentile",
+          "vol_regime",
+          "is_squeeze",
+          "avg_turnover_20d",
+          "spread_est_pct",
+          "computed_at"
+        ],
+        "properties": {
+          "isin": {
+            "$ref": "#/components/schemas/ISIN"
+          },
+          "as_of_date": {
+            "$ref": "#/components/schemas/Date"
+          },
+          "trend_state": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down",
+              "sideways"
+            ]
+          },
+          "trend_score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "rs_percentile": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Relative strength (20- and 60-day return against Nifty and the sector index) ranked within the universe."
+          },
+          "return_20d_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "return_60d_pct": {
+            "$ref": "#/components/schemas/Decimal"
+          },
+          "levels": {
+            "type": "array",
+            "maxItems": 20,
+            "description": "Support and resistance zones, nearest first.",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "low",
+                "high",
+                "source"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "support",
+                    "resistance"
+                  ]
+                },
+                "low": {
+                  "$ref": "#/components/schemas/Price"
+                },
+                "high": {
+                  "$ref": "#/components/schemas/Price"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "swing_cluster",
+                    "week_52_high",
+                    "week_52_low",
+                    "prior_month_high",
+                    "prior_month_low"
+                  ],
+                  "x-tbo-extensible": true
+                }
+              }
+            }
+          },
+          "atr_pct": {
+            "$ref": "#/components/schemas/Decimal",
+            "description": "ATR(14) as a percentage of the close."
+          },
+          "atr_pct_percentile": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Where atr_pct sits in its own last year."
+          },
+          "vol_regime": {
+            "type": "string",
+            "enum": [
+              "contracting",
+              "normal",
+              "expanding"
+            ]
+          },
+          "is_squeeze": {
+            "type": "boolean",
+            "description": "Bollinger bandwidth is in a squeeze."
+          },
+          "avg_turnover_20d": {
+            "$ref": "#/components/schemas/Money",
+            "description": "20-day average traded value in INR."
+          },
+          "spread_est_pct": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimated bid-ask spread in percent; null without enough data."
+          },
+          "computed_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "examples": [
+          {
+            "isin": "INE002A01018",
+            "as_of_date": "2026-10-14",
+            "trend_state": "up",
+            "trend_score": 71,
+            "rs_percentile": 84,
+            "return_20d_pct": "6.40",
+            "return_60d_pct": "11.25",
+            "levels": [
+              {
+                "kind": "support",
+                "low": "1228.00",
+                "high": "1234.50",
+                "source": "swing_cluster"
+              },
+              {
+                "kind": "resistance",
+                "low": "1268.00",
+                "high": "1272.00",
+                "source": "prior_month_high"
+              }
+            ],
+            "atr_pct": "1.85",
+            "atr_pct_percentile": 42,
+            "vol_regime": "normal",
+            "is_squeeze": false,
+            "avg_turnover_20d": "8420000000.00",
+            "spread_est_pct": "0.03",
+            "computed_at": "2026-10-14T10:30:00Z"
+          }
+        ]
+      },
+      "Timeframe": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Timeframe",
+        "description": "A candle or analysis interval: minutes (m), days (d) or weeks (w).",
+        "type": "string",
+        "enum": [
+          "1m",
+          "5m",
+          "15m",
+          "60m",
+          "1d",
+          "1w"
+        ],
+        "x-tbo-extensible": true,
+        "examples": [
+          "15m"
+        ]
+      },
+      "Timestamp": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Timestamp",
+        "description": "An instant as RFC 3339 in UTC with a Z suffix, at most microsecond precision. Never a local time or an offset.",
+        "type": "string",
+        "format": "date-time",
+        "maxLength": 27,
+        "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,6})?Z$",
+        "examples": [
+          "2026-10-15T03:45:00Z"
+        ]
+      },
+      "ULID": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ULID",
+        "description": "A 26-character ULID in Crockford base32 (upper case): the ID of every resource and event; sorts by creation time.",
+        "type": "string",
+        "minLength": 26,
+        "maxLength": 26,
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+        "examples": [
+          "01JA8ZQ3W7K4N2C9V5T6B1M0XD"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "A short-lived RS256 service token issued by tbo_platform, with the claims iss=tbo_platform, sub=<calling repository>, aud=<called repository> and scope (<short_name>:<read|admin|send|content|research>)."
+      }
+    }
+  }
+}

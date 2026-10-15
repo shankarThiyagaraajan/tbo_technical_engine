@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# CI's checkout of the pinned tbo_contracts
+.tbo_contracts/
+.hypothesis/
+dist/
+build/
+# Never in the repository: secrets come from the platform's secrets directory.
+# Strict rule: no .env* file is committed except .env.example (a skeleton without values); CI fails on a tracked one.
+.env
+.env.*
+!.env.example
+.dev/
+*.pem
+# Strict rule: an editor's local history is never committed (CI fails on a tracked .history/).
+.history/
