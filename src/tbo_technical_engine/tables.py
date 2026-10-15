@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Column, DateTime, Index, Integer, String, Table, Text
+from sqlalchemy import JSON, Column, DateTime, Index, Integer, String, Table, Text
 from tbo_platform_kit.db import component_metadata
 
 from tbo_technical_engine.settings import SHORT_NAME
@@ -23,3 +23,16 @@ outbox = Table(
     Column("dead_at", DateTime(timezone=True), nullable=True),
 )
 Index("ix_outbox_unpublished", outbox.c.created_at, postgresql_where=outbox.c.published_at.is_(None))
+
+# One row per evaluated candle: the indicator values that existed when a strategy looked, for audit and for
+# GET /v1/indicators/{isin}. `values` maps an indicator name to a decimal string, or null while it warms up.
+indicator_snapshot = Table(
+    "indicator_snapshot",
+    metadata,
+    Column("isin", String(12), primary_key=True),
+    Column("timeframe", String(4), primary_key=True),
+    Column("candle_start_at", DateTime(timezone=True), primary_key=True),
+    Column("values", JSON, nullable=False),
+    Column("backend", String(10), nullable=False),
+    Column("computed_at", DateTime(timezone=True), nullable=False),
+)

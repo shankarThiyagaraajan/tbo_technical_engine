@@ -26,6 +26,7 @@ dev = [
   "mypy==1.15.0",
   "schemathesis>=4.3,<5",
   "celery-types>=0.23",
+  "ta-lib>=0.6,<1",
 ]
 
 [tool.uv.sources]

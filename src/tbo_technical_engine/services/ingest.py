@@ -66,4 +66,11 @@ class CandleIngest:
             return
         if self.may_evaluate(candle):
             for evaluate in self.evaluators:
-                await evaluate(candle)
+                try:
+                    await evaluate(candle)
+                except Exception as exc:
+                    # One failing evaluator (an audit write, a strategy bug) must not stop the others, and must not
+                    # fail the event: it would be redelivered, found already stored, and skipped for everyone.
+                    log.error(
+                        "evaluator_failed", evaluator=getattr(evaluate, "__qualname__", "?"), error=type(exc).__name__
+                    )

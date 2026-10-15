@@ -14,7 +14,9 @@ import socket
 from datetime import date, timedelta
 
 import redis.asyncio as aioredis
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tbo_platform_kit.calendar import IST, TradingCalendar, now_utc
+from tbo_platform_kit.db import create_engine, session_factory
 from tbo_platform_kit.http_client import IssuerTokenProvider, ServiceClient, UpstreamUnavailable
 from tbo_platform_kit.logging import configure_logging, get_logger
 from tbo_platform_kit.metrics import Metrics
@@ -22,8 +24,10 @@ from tbo_platform_kit.metrics import Metrics
 from tbo_technical_engine.clients import fundamental, market_feed
 from tbo_technical_engine.consumers.handlers import candle_consumer, feed_consumer, universe_consumer
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
+from tbo_technical_engine.services.indicator_engine import IndicatorEngine
 from tbo_technical_engine.services.ingest import CandleIngest
 from tbo_technical_engine.services.readiness import Readiness
+from tbo_technical_engine.services.recorder import IndicatorRecorder
 from tbo_technical_engine.services.supervisor import WarmupSupervisor
 from tbo_technical_engine.services.universe import UniverseHolder
 from tbo_technical_engine.services.warmup import WarmupSpec
@@ -41,6 +45,7 @@ class SignalWorker:
         self,
         settings: Settings,
         redis: aioredis.Redis,
+        sessions: async_sessionmaker[AsyncSession],
         feed: market_feed.MarketFeedClient,
         funds: fundamental.FundamentalClient,
         metrics: Metrics | None = None,
@@ -73,6 +78,8 @@ class SignalWorker:
         )
         name = f"{socket.gethostname()}-{id(self) % 10000}"
         profile = settings.profile
+        self.engine = IndicatorEngine(self.buffer)
+        self.ingest.evaluators.append(IndicatorRecorder(self.engine, sessions, now_utc))
         self.consumers = [
             candle_consumer(redis, profile, self.ingest, name, metrics),
             feed_consumer(redis, profile, self.readiness, name, metrics),
@@ -115,11 +122,12 @@ class SignalWorker:
 
 async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
     settings = settings or Settings()
-    settings.require("redis_url", "market_feed_url", "fundamental_url")
+    settings.require("database_url", "redis_url", "market_feed_url", "fundamental_url")
     assert settings.redis_url is not None
     assert settings.market_feed_url is not None
     assert settings.fundamental_url is not None
     redis = aioredis.Redis.from_url(settings.redis_url.get_secret_value())
+    engine = create_engine(settings)
     tokens = IssuerTokenProvider.from_settings(settings)
     feed_http = ServiceClient(
         str(settings.market_feed_url), audience=market_feed.AUDIENCE, scopes=market_feed.SCOPES, tokens=tokens
@@ -130,13 +138,19 @@ async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
     metrics = Metrics(settings.short_name, settings.version, settings.profile.mode.value)
     try:
         worker = SignalWorker(
-            settings, redis, market_feed.MarketFeedClient(feed_http), fundamental.FundamentalClient(fund_http), metrics
+            settings,
+            redis,
+            session_factory(engine),
+            market_feed.MarketFeedClient(feed_http),
+            fundamental.FundamentalClient(fund_http),
+            metrics,
         )
         await worker.run(stop)
     finally:
         await feed_http.aclose()
         await fund_http.aclose()
         await redis.aclose()
+        await engine.dispose()
 
 
 def main() -> None:

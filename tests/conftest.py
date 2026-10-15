@@ -97,3 +97,12 @@ async def app(settings: Settings, keys: TestKeys, redis: Any) -> AsyncIterator[A
 async def client(app: Any) -> AsyncIterator[httpx.AsyncClient]:
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
         yield c
+
+
+@pytest.fixture
+async def sessions(app: Any) -> AsyncIterator[Any]:
+    """The app's session factory, with this component's tables emptied."""
+    factory = app.state.sessions
+    async with factory() as session, session.begin():
+        await session.execute(text(f"TRUNCATE {SHORT_NAME}.indicator_snapshot, {SHORT_NAME}.outbox"))
+    return factory

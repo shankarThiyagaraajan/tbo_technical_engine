@@ -14,7 +14,7 @@ from tbo_technical_engine.settings import REPOSITORY
 ROOT = Path(__file__).resolve().parents[1]
 DOC = json.loads((ROOT / "contract" / "openapi.json").read_text())
 # Add a path prefix here when a phase replaces its stub.
-IMPLEMENTED: tuple[str, ...] = ()
+IMPLEMENTED: tuple[str, ...] = ("/v1/indicators",)
 OPERATIONS = [
     (method.upper(), path, op["security"][0]["bearerAuth"][0])
     for path, item in DOC["paths"].items()

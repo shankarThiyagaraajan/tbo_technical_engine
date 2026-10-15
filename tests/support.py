@@ -22,7 +22,11 @@ from tbo_technical_engine.utils.timeframes import length
 ISIN_A = "INE002A01018"
 ISIN_B = "INE040A01034"
 HOLIDAYS = {
-    "2026": {"holidays": [{"date": "2026-10-02", "name": "Gandhi Jayanti"}, {"date": "2026-10-20", "name": "Dussehra"}]}
+    "2025": {"holidays": []},  # synthetic years for the indicator tests: weekends only
+    "2027": {"holidays": []},
+    "2026": {
+        "holidays": [{"date": "2026-10-02", "name": "Gandhi Jayanti"}, {"date": "2026-10-20", "name": "Dussehra"}]
+    },
 }
 CALENDAR = TradingCalendar.from_document({"years": HOLIDAYS})
 OPEN = time(9, 15)
