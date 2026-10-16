@@ -37,14 +37,17 @@ async def list_strategies(request: Request, caller: Claims = requires("technical
 
 @router.post("/v1/backtests", status_code=202)
 async def create_backtest(caller: Claims = requires("technical:research")) -> None:
+    """Backtests are TE5; until then the operation answers 501 so the contract stays complete."""
     raise not_implemented("TE5")
 
 
 @router.get("/v1/backtests/{backtest_id}")
 async def get_backtest(backtest_id: str, caller: Claims = requires("technical:research")) -> None:
+    """TE5 stub (501)."""
     raise not_implemented("TE5")
 
 
 @router.get("/v1/backtests/{backtest_id}/trades")
 async def list_backtest_trades(backtest_id: str, caller: Claims = requires("technical:research")) -> None:
+    """TE5 stub (501)."""
     raise not_implemented("TE5")

@@ -11,12 +11,13 @@ from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.http_client import IssuerTokenProvider, ServiceClient
 
 from tbo_technical_engine.clients import fundamental, market_feed
+from tbo_technical_engine.config.settings import REPOSITORY, Settings
 from tbo_technical_engine.services.snapshot_service import Kind, SnapshotService, Summary
 from tbo_technical_engine.services.swing_loader import load_swing
-from tbo_technical_engine.settings import REPOSITORY, Settings
 
 
 async def run_job(settings: Settings, kind: Kind, now: datetime | None = None) -> Summary:
+    """Open the stores and clients, then run one snapshot pass."""
     settings.require("database_url", "redis_url", "market_feed_url", "fundamental_url")
     assert settings.redis_url is not None
     assert settings.market_feed_url is not None

@@ -17,6 +17,8 @@ Regime = Literal["contracting", "normal", "expanding"]
 
 @dataclass(frozen=True)
 class Volatility:
+    """Volatility regime, ATR and squeeze flag."""
+
     atr: float
     atr_pct: float
     percentile: int
@@ -47,6 +49,7 @@ def bandwidth(close: F64, period: int, k: float) -> F64:
 
 
 def assess(bars: Bars, p: VolatilityParams) -> Volatility:
+    """Measure ATR, its regime and the squeeze."""
     atr_series = indicators.get("atr", period=p.atr_period).batch(bars)[f"atr_{p.atr_period}"]
     with np.errstate(divide="ignore", invalid="ignore"):
         pct_series = atr_series / bars.close * 100.0

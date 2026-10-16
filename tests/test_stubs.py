@@ -9,7 +9,7 @@ import httpx
 import pytest
 from tbo_platform_kit.testing import TestKeys
 
-from tbo_technical_engine.settings import REPOSITORY
+from tbo_technical_engine.config.settings import REPOSITORY
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = json.loads((ROOT / "contract" / "openapi.json").read_text())

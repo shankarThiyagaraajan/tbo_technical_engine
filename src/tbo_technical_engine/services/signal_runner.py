@@ -26,6 +26,9 @@ SIGNAL_SCHEMA = "https://tbo.internal/schemas/technical/signal_candidate.v1.json
 
 
 class SignalRunner:
+    """Evaluates a candle, stores the candidates and queues their events in one transaction, then starts the cooldowns.
+    The cooldown moves only after the write, so a failed write can be retried by redelivery."""
+
     def __init__(
         self,
         evaluator: StrategyEvaluator,
@@ -41,6 +44,7 @@ class SignalRunner:
         self.clock = clock
 
     async def __call__(self, candle: Candle) -> None:
+        """Evaluate `candle`; no-op when no strategy fired."""
         await self.cooldowns.load(candle.isin, self.evaluator.fired)
         now = self.clock()
         candidates = self.evaluator.evaluate(candle, now)

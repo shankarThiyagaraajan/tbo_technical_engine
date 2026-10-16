@@ -6,19 +6,20 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import Row, and_, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbo_technical_engine.schemas.signal import SignalCandidate
-from tbo_technical_engine.tables import signal_candidate as t
+from tbo_technical_engine.store.tables import signal_candidate as t
 
 
 def price(value: Decimal) -> str:
+    """A stored Numeric as the contract's decimal string (no exponent)."""
     return format(value, "f")
 
 
-def _to_candidate(row: Any) -> SignalCandidate:
+def _to_candidate(row: Row[Any]) -> SignalCandidate:
     return SignalCandidate(
         signal_id=row.signal_id,
         isin=row.isin,
@@ -48,6 +49,7 @@ async def save(session: AsyncSession, c: SignalCandidate) -> bool:
 
 
 async def get(session: AsyncSession, signal_id: str) -> SignalCandidate | None:
+    """One candidate by ID, or None."""
     row = (await session.execute(select(t).where(t.c.signal_id == signal_id))).first()
     return None if row is None else _to_candidate(row)
 

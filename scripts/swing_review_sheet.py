@@ -33,6 +33,7 @@ RULES = {
 
 
 def main() -> None:
+    """Print the review sheet of fixture setups."""
     cases = build_sample()
     lines = [
         "# TE6 review sample: 30 swing setups from fixtures",

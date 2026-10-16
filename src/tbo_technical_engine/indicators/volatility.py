@@ -18,10 +18,12 @@ from tbo_technical_engine.indicators.base import NAN, Indicator, Stream, full
 
 
 def true_range(high: float, low: float, prev_close: float) -> float:
+    """The largest of the bar's own range and its gaps from the previous close (a gap-up still counts as range)."""
     return max(high - low, abs(high - prev_close), abs(low - prev_close))
 
 
 def true_range_series(bars: Bars) -> F64:
+    """True range of every bar; the first bar has no previous close, so it is nan."""
     out = full(len(bars))
     for i in range(1, len(bars)):
         out[i] = true_range(float(bars.high[i]), float(bars.low[i]), float(bars.close[i - 1]))
@@ -29,10 +31,13 @@ def true_range_series(bars: Bars) -> F64:
 
 
 def _num(value: float) -> str:
+    """A parameter as it appears in an output name: `3.0` -> `3`, `1.5` -> `1.5` (`supertrend_10_3`)."""
     return f"{value:g}"
 
 
 class Atr(Indicator):
+    """Average true range, Wilder-smoothed and seeded with the mean of the first `period` true ranges (TA-Lib)."""
+
     def __init__(self, period: int = 14) -> None:
         if period < 2:
             raise ValueError("period must be at least 2")
@@ -65,6 +70,8 @@ class Atr(Indicator):
 
 
 class _AtrStream:
+    """Live form of Atr."""
+
     def __init__(self, spec: Atr) -> None:
         self.spec = spec
         self.prev_close = NAN
@@ -86,6 +93,8 @@ class _AtrStream:
 
 
 class Supertrend(Indicator):
+    """ATR bands that flip direction when the close crosses the opposite band; outputs the line and the direction."""
+
     def __init__(self, period: int = 10, multiplier: float = 3.0) -> None:
         if period < 2 or multiplier <= 0:
             raise ValueError("period must be at least 2 and multiplier positive")
@@ -149,6 +158,8 @@ class _SupertrendState:
 
 
 class _SupertrendStream:
+    """Live form of Supertrend: an ATR stream feeding the shared band state."""
+
     def __init__(self, spec: Supertrend) -> None:
         self.spec = spec
         self.atr = spec._atr.stream()

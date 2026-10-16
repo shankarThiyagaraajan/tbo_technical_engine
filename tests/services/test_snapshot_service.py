@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from tbo_contracts import validate_event
 
 from tbo_technical_engine.services.snapshot_service import IncompleteRun, SnapshotService
-from tbo_technical_engine.tables import outbox, swing_setup, technical_snapshot
+from tbo_technical_engine.store.tables import outbox, swing_setup, technical_snapshot
 from tests.support import CALENDAR, FakeFeed, fundamental_client
 from tests.swing.data import DAY, PARAMS, as_bars, bars_from, base_breakout_series, candles_from, mean_reverting
 

@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbo_technical_engine.schemas.swing import Snapshot
-from tbo_technical_engine.tables import technical_snapshot as t
+from tbo_technical_engine.store.tables import technical_snapshot as t
 
 
 def content_hash(snapshot: Snapshot) -> str:
@@ -52,6 +52,7 @@ async def serving(session: AsyncSession, trade_date: date | None) -> date | None
 
 
 async def get(session: AsyncSession, as_of: date, isin: str) -> dict[str, Any] | None:
+    """One stock's snapshot for a date, or None."""
     row = (await session.execute(select(t.c.data).where(t.c.as_of_date == as_of, t.c.isin == isin))).first()
     return None if row is None else dict(row.data)
 

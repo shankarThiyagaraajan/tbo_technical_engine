@@ -25,6 +25,9 @@ SESSION_WARMUP_AT = time(9, 0)
 
 
 class WarmupSupervisor:
+    """Keeps the buffer filled: asks for a fresh warm-up at the start of each session, reads the feed's status at start,
+    and warms any stock that is not yet warm."""
+
     def __init__(
         self,
         client: MarketFeedClient,
@@ -47,6 +50,8 @@ class WarmupSupervisor:
         self._session_day: date | None = None
 
     async def tick(self) -> None:
+        """One supervision step; safe to call every few seconds. Does nothing outside trading days or without a
+        universe."""
         now = self.clock()
         local = now.astimezone(IST)
         if not self.calendar.is_trading_day(local.date()) or not self.universe.isins:

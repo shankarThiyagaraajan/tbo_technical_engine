@@ -14,12 +14,15 @@ from collections.abc import Iterable
 from datetime import datetime
 
 from tbo_technical_engine.schemas.candle import Candle
+from tbo_technical_engine.utils.timeframes import length
 
 CAPACITY = {"1m": 1000, "5m": 1000, "15m": 500, "60m": 300, "1d": 400, "1w": 120}
 """Most candles kept per series: about 13 sessions of 5-minute candles, 20 of 15-minute ones, 400 daily candles."""
 
 
 class CandleBuffer:
+    """In-memory closed candles per (stock, timeframe), bounded by CAPACITY."""
+
     def __init__(self) -> None:
         self._series: dict[tuple[str, str], dict[datetime, Candle]] = defaultdict(dict)
 
@@ -37,6 +40,7 @@ class CandleBuffer:
         return True
 
     def add_many(self, candles: Iterable[Candle]) -> int:
+        """Add several candles; returns how many were new or newer revisions."""
         return sum(self.add(c) for c in candles)
 
     def series(self, isin: str, timeframe: str) -> list[Candle]:
@@ -51,15 +55,15 @@ class CandleBuffer:
         15-minute candle that closes together with a 5-minute one has arrived yet then cannot change a result, so a
         live run and a replay see the same inputs.
         """
-        from tbo_technical_engine.utils.timeframes import length
-
         span = length(timeframe)
         return [c for c in self.series(isin, timeframe) if c.start_at + span <= cutoff]
 
     def count(self, isin: str, timeframe: str) -> int:
+        """How many candles are held for the series."""
         return len(self._series.get((isin, timeframe), ()))
 
     def last(self, isin: str, timeframe: str) -> Candle | None:
+        """The newest candle of the series, or None when it is empty."""
         held = self._series.get((isin, timeframe))
         return held[max(held)] if held else None
 

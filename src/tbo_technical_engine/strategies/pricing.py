@@ -18,6 +18,8 @@ TICK = Decimal("0.05")
 
 
 def to_tick(value: float, *, up: bool) -> Decimal:
+    """Round a price to the exchange's 0.05 tick, up or down as asked: `to_tick(101.23, up=True)` is `101.25`,
+    `up=False` is `101.20`. Callers choose the direction that keeps the trade conservative (see `finish`)."""
     rounding = ROUND_CEILING if up else ROUND_FLOOR
     steps = (Decimal(repr(round(value, 6))) / TICK).to_integral_value(rounding=rounding)
     return (steps * TICK).quantize(Decimal("0.01"))
@@ -42,6 +44,9 @@ def finish(
     components: Sequence[Component],
     indicators: Mapping[str, float],
 ) -> Draft | None:
+    """Turn a rule's raw levels into a `Draft`: an entry zone around the close, a stop and two targets on the 0.05
+    tick, rounded the safe way (a buy's zone widens, its stop moves away and its targets come nearer; a sell mirrors
+    it). Returns None when the rounded levels are out of order, so a bad draft is dropped rather than emitted."""
     d = direction(side)
     close = float(ctx.now.candle.close)
     zone = p.number("entry_zone_atr") * atr

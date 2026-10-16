@@ -43,7 +43,7 @@ def candle(
     price = Decimal(close)
     return Candle(
         isin=isin,
-        timeframe=timeframe,  # type: ignore[arg-type]
+        timeframe=timeframe,
         start_at=start,
         open=price,
         high=price + Decimal("1.00"),

@@ -6,6 +6,8 @@ from tbo_technical_engine.schemas.candle import UniverseSnapshot
 
 
 class UniverseHolder:
+    """Holds the newest universe seen, so a feed or fundamental-engine outage keeps the last known list."""
+
     def __init__(self) -> None:
         self.snapshot: UniverseSnapshot | None = None
         self._isins: frozenset[str] = frozenset()
@@ -27,6 +29,7 @@ class UniverseHolder:
 
     @property
     def isins(self) -> frozenset[str]:
+        """The held stocks as a set, for fast membership tests."""
         return self._isins
 
     def __contains__(self, isin: object) -> bool:

@@ -11,8 +11,8 @@ import pytest
 from tbo_contracts import validate
 from tbo_platform_kit.testing import TestKeys
 
+from tbo_technical_engine.config.settings import REPOSITORY
 from tbo_technical_engine.schemas.swing import Setup
-from tbo_technical_engine.settings import REPOSITORY
 from tbo_technical_engine.store import snapshots as snapshot_store
 from tbo_technical_engine.store import swing_setups as setup_store
 from tbo_technical_engine.swing import analysis
@@ -41,7 +41,7 @@ def setup(isin: str, day: date, kind: str = "base_breakout") -> Setup:
         setup_id=setup_id(isin, kind, day, NOW),
         isin=isin,
         setup_date=day,
-        setup_type=kind,  # type: ignore[arg-type]
+        setup_type=kind,
         side="buy",
         entry=Decimal("105.00"),
         stop=Decimal("97.90"),

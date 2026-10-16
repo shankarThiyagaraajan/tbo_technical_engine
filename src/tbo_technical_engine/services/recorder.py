@@ -18,6 +18,9 @@ RECORDED = ("5m", "15m")
 
 
 class IndicatorRecorder:
+    """Saves a snapshot of the indicator values after each evaluated candle. Each (stock, timeframe, candle, revision)
+    is written once; a redelivered candle is skipped."""
+
     def __init__(
         self, engine: IndicatorEngine, sessions: async_sessionmaker[AsyncSession], clock: Callable[[], datetime]
     ) -> None:
@@ -27,6 +30,7 @@ class IndicatorRecorder:
         self._saved: dict[tuple[str, str], tuple[datetime, int]] = {}
 
     async def __call__(self, candle: Candle) -> None:
+        """Record the 5-minute and 15-minute snapshots as of the newest candle held, in one transaction."""
         now = self.clock()
         async with self.sessions() as session, session.begin():
             for timeframe in RECORDED:

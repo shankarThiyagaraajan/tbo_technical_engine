@@ -8,8 +8,8 @@ import pytest
 from tbo_contracts import validate
 from tbo_platform_kit.testing import TestKeys
 
+from tbo_technical_engine.config.settings import REPOSITORY
 from tbo_technical_engine.schemas.indicators import IndicatorSnapshot
-from tbo_technical_engine.settings import REPOSITORY
 from tbo_technical_engine.store import indicators as store
 from tests.support import ISIN_A
 

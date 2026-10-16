@@ -27,6 +27,8 @@ def decimal(value: float, places: int = 2) -> str:
 
 @dataclass(frozen=True)
 class Measured:
+    """Everything measured on one stock's bars."""
+
     isin: str
     as_of: date
     close: float
@@ -63,6 +65,7 @@ def measure(isin: str, bars: Bars, p: SwingParams) -> Measured | None:
 
 
 def snapshot(m: Measured, rs_percentile: int, avg_turnover: float, computed_at: str) -> Snapshot:
+    """Build the snapshot record from the measurements."""
     return Snapshot(
         isin=m.isin,
         as_of_date=m.as_of.isoformat(),
@@ -83,5 +86,6 @@ def snapshot(m: Measured, rs_percentile: int, avg_turnover: float, computed_at: 
 
 
 def find_setup(m: Measured, bars: Bars, p: SwingParams) -> setups.Draft | None:
+    """The first setup the detectors find, in precedence order, or None."""
     emas = {p.trend.fast: m.trend.ema_fast, p.trend.mid: m.trend.ema_mid}
     return setups.detect(bars, m.atr, m.trend, emas, p.setups)

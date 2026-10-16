@@ -116,6 +116,18 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 - The exit criterion needs recorded data: snapshots for 500 stocks by 16:30 measured against the real feed, and a manual review of 30
   setups found on real history (the fixture sample is `docs/swing-review-sample.md`, regenerate with `uv run python -m scripts.swing_review_sheet`).
 - Sector-index relative strength waits for an index source (the same gap as TE4).
-- Collisions: the code standards PR (#1) moves `settings.py` to `config/` and `tables.py` to `store/`; TE6 adds fields to the first
-  and two tables to the second, so whichever merges second needs a small rebase of those files. TE5 touches `tasks.py` (its
-  `run_backtest`) and the contract-backed API files only, not `swing/`.
+- Collisions: TE5 touches `tasks.py` (its `run_backtest`) and the contract-backed API files only, not `swing/`; whichever of TE5 and TE6 merges second needs a small rebase of `tasks.py`.
+
+## Code standards pass (2026-10-15, branch `claude/code-standards`)
+
+- `settings.py` moved to `config/settings.py` and `tables.py` to `store/tables.py` (imports updated; no behaviour change).
+- Docstrings that say why added across every package; `Any` removed where a real type exists (`**params: float`,
+  `Redis`, `Row[Any]`, `CursorResult`). Left as `Any`, each with a reason: `CooldownStore.redis` (redis stubs cannot be
+  awaited under strict mypy), JSON event/response dicts, and the Celery/FastAPI state objects.
+- Dataclasses (`WarmupSpec`, `Bars`, `Context`, `IndexSeries`, ...) stay beside the logic that owns them; only pydantic
+  models live in `schemas/`.
+- Checks (2026-10-16): `make check` = ruff (lint, McCabe 10, docstrings), ruff format, mypy --strict on src and tests,
+  bandit, pip-audit, pytest with an 80 percent coverage floor (94.7 percent at the time); `.pre-commit-config.yaml` runs
+  ruff, ruff format and mypy. Found and fixed: 45 mypy errors in tests (generics, unused ignores, loose dict types), 9
+  packages without a docstring, three comprehension nits. pip-audit: pytest 8.4.2 (PYSEC-2026-1845, dev-only) ignored
+  with a reason because the fix needs pytest 9 and pytest-asyncio 1.x. Bandit: B101 skipped (as ruff S101), B104 marked.

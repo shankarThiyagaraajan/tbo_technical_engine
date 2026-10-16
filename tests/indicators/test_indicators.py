@@ -141,8 +141,8 @@ def test_volume_average_leaves_the_current_bar_out() -> None:
 
 
 def test_supertrend_follows_a_rising_market_below_the_price_and_flips_when_it_breaks() -> None:
-    up = [(p, p + 1, p - 1, p + 0.5, 100) for p in np.arange(100.0, 130.0, 1.0)]
-    down = [(p, p + 1, p - 1, p - 0.5, 100) for p in np.arange(129.0, 90.0, -3.0)]
+    up = [(p, p + 1, p - 1, p + 0.5, 100.0) for p in map(float, np.arange(100.0, 130.0, 1.0))]
+    down = [(p, p + 1, p - 1, p - 0.5, 100.0) for p in map(float, np.arange(129.0, 90.0, -3.0))]
     bars = from_ohlcv(up + down)
     out = indicators.get("supertrend", period=10, multiplier=3.0).batch(bars)
     line, direction = out["supertrend_10_3"], out["supertrend_dir_10_3"]
@@ -154,7 +154,7 @@ def test_supertrend_follows_a_rising_market_below_the_price_and_flips_when_it_br
 
 
 def test_the_supertrend_band_only_tightens_while_the_trend_holds() -> None:
-    rows = [(p, p + 1, p - 1, p + 0.5, 100) for p in np.arange(100.0, 160.0, 1.0)]
+    rows = [(p, p + 1, p - 1, p + 0.5, 100.0) for p in map(float, np.arange(100.0, 160.0, 1.0))]
     line = indicators.get("supertrend").batch(from_ohlcv(rows))["supertrend_10_3"]
     valid = line[~np.isnan(line)]
     assert (np.diff(valid) >= 0).all()

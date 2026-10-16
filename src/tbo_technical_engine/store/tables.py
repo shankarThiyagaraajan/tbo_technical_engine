@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import JSON, Column, Date, DateTime, Index, Integer, Numeric, String, Table, Text, UniqueConstraint
 from tbo_platform_kit.db import component_metadata
 
-from tbo_technical_engine.settings import SHORT_NAME
+from tbo_technical_engine.config.settings import SHORT_NAME
 
 metadata = component_metadata(SHORT_NAME)
 

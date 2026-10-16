@@ -25,6 +25,8 @@ TRADING_DAYS_52W = 252
 
 @dataclass(frozen=True)
 class Zone:
+    """A clustered price zone with its touch count."""
+
     low: float
     high: float
     source: Source

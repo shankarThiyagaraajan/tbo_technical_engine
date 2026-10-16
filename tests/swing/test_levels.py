@@ -33,7 +33,7 @@ def test_prior_month_is_the_calendar_month_before_the_session() -> None:
     bars = bars_from(close, end=date(2026, 10, 15))
     september = [i for i, d in enumerate(days) if d.month == 9]
     high, low = levels.prior_month_range(bars, date(2026, 10, 15)) or (0, 0)
-    assert high == max(bars.high[september]) and low == min(bars.low[september])
+    assert high == float(bars.high[september].max()) and low == float(bars.low[september].min())
 
 
 def test_prior_month_across_a_year_end() -> None:

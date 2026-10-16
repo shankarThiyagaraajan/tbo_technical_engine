@@ -42,6 +42,8 @@ class WarmupSpec:
 
 @dataclass
 class WarmupResult:
+    """Which stocks ended the warm-up with enough history (`warm`) and which did not (`cold`)."""
+
     warm: set[str] = field(default_factory=set)
     cold: set[str] = field(default_factory=set)
 
@@ -55,6 +57,7 @@ def window_start(calendar: TradingCalendar, today: date, sessions: int) -> datet
 
 
 def is_warm(buffer: CandleBuffer, isin: str, spec: WarmupSpec) -> bool:
+    """True when the buffer holds the minimum number of candles of every timeframe the spec lists for `isin`."""
     return all(buffer.count(isin, tf) >= need for tf, need in spec.min_bars.items())
 
 

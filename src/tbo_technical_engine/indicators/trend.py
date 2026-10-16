@@ -13,6 +13,8 @@ from tbo_technical_engine.indicators.volatility import true_range
 
 
 class _AdxState:
+    """Wilder's smoothing for +DM, -DM and TR, then for DX; shared by batch and stream so they cannot disagree."""
+
     def __init__(self, period: int) -> None:
         self.n = period
         self.count = 0  # bars seen
@@ -59,6 +61,8 @@ class _AdxState:
 
 
 class Adx(Indicator):
+    """ADX with +DI and -DI (outputs `adx_N`, `plus_di_N`, `minus_di_N`); matches TA-Lib."""
+
     def __init__(self, period: int = 14) -> None:
         if period < 2:
             raise ValueError("period must be at least 2")
@@ -87,6 +91,8 @@ class Adx(Indicator):
 
 
 class _AdxStream:
+    """Live form of Adx: feeds the shared state one bar at a time."""
+
     def __init__(self, spec: Adx) -> None:
         self.spec = spec
         self.state = _AdxState(spec.period)

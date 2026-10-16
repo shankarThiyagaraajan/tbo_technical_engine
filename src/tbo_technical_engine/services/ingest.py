@@ -30,6 +30,9 @@ STORED_TIMEFRAMES = frozenset({"5m", "15m"})
 
 
 class CandleIngest:
+    """Takes each `candle.closed` event into the buffer and, when the engine is allowed to act on it, hands it to the
+    evaluators."""
+
     def __init__(
         self,
         buffer: CandleBuffer,
@@ -50,6 +53,8 @@ class CandleIngest:
         """Called, in order, with each candle that may be evaluated (the strategies, from TE3)."""
 
     def may_evaluate(self, candle: Candle) -> bool:
+        """True only for a 5-minute candle of a universe stock, while the feed is healthy and warm-up is done, and the
+        candle closed less than `max_age` ago (a backlog after a restart is not a signal)."""
         if candle.timeframe != ENTRY_TIMEFRAME or not self.readiness.active:
             return False
         if candle.isin not in self.universe or not is_warm(self.buffer, candle.isin, self.spec):

@@ -73,6 +73,10 @@ class _State:
 
 
 class IndicatorEngine:
+    """Indicator values for the candles in the buffer. Each (stock, timeframe) keeps a streaming suite and advances it
+    by one bar when exactly one candle was appended; any other change (a gap, a correction, an older candle) rebuilds it
+    from the buffer, so a result never depends on how the state was reached."""
+
     def __init__(self, buffer: CandleBuffer, suites: dict[str, Suite] | None = None) -> None:
         self.buffer = buffer
         self.suites = suites or default_suites()
@@ -127,5 +131,6 @@ class IndicatorEngine:
         return state
 
     def forget(self, isins: set[str] | frozenset[str]) -> None:
+        """Drop the state of stocks that left the universe."""
         for key in [k for k in self._state if k[0] in isins]:
             del self._state[key]

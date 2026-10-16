@@ -31,6 +31,8 @@ VOLUME_LOOKBACK = 20
 
 @dataclass(frozen=True)
 class Draft:
+    """A setup before its ID and dates are set."""
+
     setup_type: SetupType
     entry: Decimal
     stop: Decimal
@@ -52,6 +54,7 @@ def finish(
     *,
     entry_up_tick: bool = False,
 ) -> Draft | None:
+    """Round the entry first, then derive stop and targets as exact R multiples of it."""
     entry_p = to_tick(entry, up=True) + (TICK if entry_up_tick else Decimal(0))
     entry = float(entry_p)  # the risk is measured from the price the trade is really entered at
     stop = max(stop, entry - p.risk_atr_max * atr)
@@ -74,6 +77,7 @@ def volume_ratio(bars: Bars, window: int) -> float:
 
 
 def base_breakout(bars: Bars, atr: float, trend: Trend, p: SetupParams) -> Draft | None:
+    """Close above a tight base's high on high volume."""
     q = p.base_breakout
     n = len(bars)
     if n < q.base_bars + 2 or trend.state == "down":
@@ -105,6 +109,7 @@ def base_breakout(bars: Bars, atr: float, trend: Trend, p: SetupParams) -> Draft
 
 
 def ema_pullback(bars: Bars, atr: float, trend: Trend, emas: dict[int, float], p: SetupParams) -> Draft | None:
+    """A dip to the 20/50 EMA inside an uptrend, with a bounce."""
     q = p.ema_pullback
     n = len(bars)
     if trend.state != "up" or n < q.pullback_bars + 2:
@@ -142,6 +147,7 @@ def ema_pullback(bars: Bars, atr: float, trend: Trend, emas: dict[int, float], p
 
 
 def week_52_high_breakout(bars: Bars, atr: float, p: SetupParams) -> Draft | None:
+    """First close above the 52-week high on high volume."""
     q = p.week_52_high_breakout
     n = len(bars)
     if n < q.min_bars:

@@ -46,6 +46,9 @@ def boundary_of(now: datetime) -> datetime:
 
 
 class ContextService:
+    """Builds the market context at each 5-minute boundary of the session and publishes it once per boundary (stored
+    first, then announced through the outbox)."""
+
     def __init__(
         self,
         buffer: CandleBuffer,

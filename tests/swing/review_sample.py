@@ -77,17 +77,25 @@ def build_sample() -> list[Case]:
 
 def check(case: Case) -> list[str]:
     """Everything the detector said that plain arithmetic on the raw bars does not support. Empty when it checks out."""
-    problems: list[str] = []
-    d, bars = case.draft, case.bars
+    d = case.draft
     if d is None:
         return ["no setup found"]
+    problems: list[str] = []
     if d.setup_type != case.expected:
         problems.append(f"found {d.setup_type}, expected {case.expected}")
-    high = [float(x) for x in bars.high]
-    low = [float(x) for x in bars.low]
-    close = [float(x) for x in bars.close]
-    volume = [float(x) for x in bars.volume]
-    n = len(close)
+    problems += _check_prices(case, d)
+    if d.setup_type == "base_breakout":
+        problems += _check_base(case.bars, d)
+    elif d.setup_type == "week_52_high_breakout":
+        problems += _check_week_52(case.bars, d)
+    else:
+        problems += _check_pullback(case.bars, d)
+    return problems
+
+
+def _check_prices(case: Case, d: setups.Draft) -> list[str]:
+    """Order, risk band, tick grid and R multiples of the four prices."""
+    problems: list[str] = []
     entry, stop, t1, t2 = (float(x) for x in (d.entry, d.stop, d.target_1, d.target_2))
     risk = entry - stop
     if not stop < entry < t1 < t2:
@@ -102,41 +110,69 @@ def check(case: Case) -> list[str]:
         "ema_pullback": SP.ema_pullback,
         "week_52_high_breakout": SP.week_52_high_breakout,
     }[d.setup_type]
-    for got, r, name in ((t1, rule.target_1_r, "T1"), (t2, rule.target_2_r, "T2")):
+    rule_r = (rule.target_1_r, rule.target_2_r)  # type: ignore[attr-defined]
+    for got, r, name in ((t1, rule_r[0], "T1"), (t2, rule_r[1], "T2")):
         # The stop rounds down (risk grows by under a tick, r times that in the target) and the target rounds down.
         if abs((got - entry) - r * risk) > (r + 1.01) * TICK:
             problems.append(f"{name} is {(got - entry) / risk:.3f}R, rule says {r}R")
-    if d.setup_type == "base_breakout":
-        base = slice(n - 1 - SP.base_breakout.base_bars, n - 1)
-        base_high, base_low = max(high[base]), min(low[base])
-        mean_volume = sum(volume[base]) / len(volume[base])
-        if abs(d.facts["base_high"] - base_high) > 1e-9 or abs(d.facts["base_low"] - base_low) > 1e-9:
-            problems.append("base high/low differ from a plain max/min over the 20 sessions before")
-        if not close[-1] > base_high:
-            problems.append("close is not above the base high")
-        if (base_high - base_low) / base_high * 100 > SP.base_breakout.max_depth_pct:
-            problems.append("base is deeper than the limit")
-        if volume[-1] / mean_volume < SP.base_breakout.volume_ratio_min:
-            problems.append("volume is under the minimum multiple")
-        if close[-2] > max(high[n - 2 - SP.base_breakout.base_bars : n - 2]):
-            problems.append("yesterday had already closed above the base")
-    elif d.setup_type == "week_52_high_breakout":
-        prior = max(high[max(0, n - 1 - SP.week_52_high_breakout.lookback) : n - 1])
-        if abs(d.facts["prior_high"] - prior) > 1e-9 or not close[-1] > prior:
-            problems.append("close is not above the highest high of the 250 sessions before")
-        if volume[-1] / (sum(volume[-21:-1]) / 20) < SP.week_52_high_breakout.volume_ratio_min:
-            problems.append("volume is under the minimum multiple")
-    else:
-        period = int(d.facts["ema_period"])
-        ema = _plain_ema(close, period)
-        if not (ema * (1 - SP.ema_pullback.touch_pct / 100) <= low[-1] <= ema * (1 + SP.ema_pullback.touch_pct / 100)):
-            problems.append("the low is not within the band around the EMA")
-        if close[-1] < ema or not close[-1] > float(bars.open[-1]):
-            problems.append("the day did not close up and above the EMA")
-        if (max(high[n - 1 - SP.ema_pullback.pullback_bars : n - 1]) - close[-1]) / close[-1] * 100 < 2.0 - 1e-9:
-            problems.append("the pullback is shallower than the minimum")
-        if not entry > high[-1]:
-            problems.append("entry is not above the day's high")
+    return problems
+
+
+def _check_base(bars: Bars, d: setups.Draft) -> list[str]:
+    """Base breakout rules recomputed with plain max/min/mean."""
+    problems: list[str] = []
+    high = [float(x) for x in bars.high]
+    low = [float(x) for x in bars.low]
+    close = [float(x) for x in bars.close]
+    volume = [float(x) for x in bars.volume]
+    n = len(close)
+    base = slice(n - 1 - SP.base_breakout.base_bars, n - 1)
+    base_high, base_low = max(high[base]), min(low[base])
+    mean_volume = sum(volume[base]) / len(volume[base])
+    if abs(d.facts["base_high"] - base_high) > 1e-9 or abs(d.facts["base_low"] - base_low) > 1e-9:
+        problems.append("base high/low differ from a plain max/min over the 20 sessions before")
+    if not close[-1] > base_high:
+        problems.append("close is not above the base high")
+    if (base_high - base_low) / base_high * 100 > SP.base_breakout.max_depth_pct:
+        problems.append("base is deeper than the limit")
+    if volume[-1] / mean_volume < SP.base_breakout.volume_ratio_min:
+        problems.append("volume is under the minimum multiple")
+    if close[-2] > max(high[n - 2 - SP.base_breakout.base_bars : n - 2]):
+        problems.append("yesterday had already closed above the base")
+    return problems
+
+
+def _check_week_52(bars: Bars, d: setups.Draft) -> list[str]:
+    """52-week high breakout rules recomputed with plain max/mean."""
+    problems: list[str] = []
+    high = [float(x) for x in bars.high]
+    close = [float(x) for x in bars.close]
+    volume = [float(x) for x in bars.volume]
+    n = len(close)
+    prior = max(high[max(0, n - 1 - SP.week_52_high_breakout.lookback) : n - 1])
+    if abs(d.facts["prior_high"] - prior) > 1e-9 or not close[-1] > prior:
+        problems.append("close is not above the highest high of the 250 sessions before")
+    if volume[-1] / (sum(volume[-21:-1]) / 20) < SP.week_52_high_breakout.volume_ratio_min:
+        problems.append("volume is under the minimum multiple")
+    return problems
+
+
+def _check_pullback(bars: Bars, d: setups.Draft) -> list[str]:
+    """EMA pullback rules recomputed with a plain EMA."""
+    problems: list[str] = []
+    high = [float(x) for x in bars.high]
+    low = [float(x) for x in bars.low]
+    close = [float(x) for x in bars.close]
+    n = len(close)
+    ema = _plain_ema(close, int(d.facts["ema_period"]))
+    if not (ema * (1 - SP.ema_pullback.touch_pct / 100) <= low[-1] <= ema * (1 + SP.ema_pullback.touch_pct / 100)):
+        problems.append("the low is not within the band around the EMA")
+    if close[-1] < ema or not close[-1] > float(bars.open[-1]):
+        problems.append("the day did not close up and above the EMA")
+    if (max(high[n - 1 - SP.ema_pullback.pullback_bars : n - 1]) - close[-1]) / close[-1] * 100 < 2.0 - 1e-9:
+        problems.append("the pullback is shallower than the minimum")
+    if not float(d.entry) > high[-1]:
+        problems.append("entry is not above the day's high")
     return problems
 
 

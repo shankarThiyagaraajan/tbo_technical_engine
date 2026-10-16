@@ -18,6 +18,8 @@ class _Strict(BaseModel):
 
 
 class TrendWeights(_Strict):
+    """Weights of the trend score parts."""
+
     close_above_fast: float = Field(ge=0)
     close_above_mid: float = Field(ge=0)
     fast_above_mid: float = Field(ge=0)
@@ -27,6 +29,8 @@ class TrendWeights(_Strict):
 
 
 class TrendParams(_Strict):
+    """Trend score thresholds and ADX gating."""
+
     fast: int = Field(ge=2)
     mid: int = Field(ge=2)
     slow: int = Field(ge=2)
@@ -40,11 +44,15 @@ class TrendParams(_Strict):
 
 
 class RelativeStrengthParams(_Strict):
+    """Relative-strength lookback."""
+
     weight_20d: float = Field(ge=0)
     weight_60d: float = Field(ge=0)
 
 
 class LevelParams(_Strict):
+    """Support and resistance zone detection settings."""
+
     pivot_wing: int = Field(ge=1)
     lookback: int = Field(ge=20)
     cluster_atr: float = Field(gt=0)
@@ -54,6 +62,8 @@ class LevelParams(_Strict):
 
 
 class VolatilityParams(_Strict):
+    """Volatility regime and squeeze settings."""
+
     atr_period: int = Field(ge=2)
     percentile_window: int = Field(ge=20)
     min_points: int = Field(ge=2)
@@ -67,6 +77,8 @@ class VolatilityParams(_Strict):
 
 
 class LiquidityParams(_Strict):
+    """Liquidity metric settings."""
+
     turnover_days: int = Field(ge=1)
     spread_days: int = Field(ge=2)
     spread_min_pairs: int = Field(ge=1)
@@ -76,6 +88,8 @@ SetupType = Literal["base_breakout", "ema_pullback", "week_52_high_breakout"]
 
 
 class BaseBreakoutParams(_Strict):
+    """Base breakout detector settings."""
+
     base_bars: int = Field(ge=5)
     max_depth_pct: float = Field(gt=0)
     volume_ratio_min: float = Field(gt=0)
@@ -86,6 +100,8 @@ class BaseBreakoutParams(_Strict):
 
 
 class EmaPullbackParams(_Strict):
+    """Pullback to the 20/50 EMA detector settings."""
+
     ema: list[int] = Field(min_length=1)
     touch_pct: float = Field(ge=0)
     pullback_bars: int = Field(ge=2)
@@ -96,6 +112,8 @@ class EmaPullbackParams(_Strict):
 
 
 class Week52Params(_Strict):
+    """52-week high breakout detector settings."""
+
     lookback: int = Field(ge=20)
     min_bars: int = Field(ge=20)
     volume_ratio_min: float = Field(gt=0)
@@ -106,6 +124,8 @@ class Week52Params(_Strict):
 
 
 class SetupParams(_Strict):
+    """Settings shared by the setup detectors."""
+
     valid_days: int = Field(ge=1, le=10)
     risk_atr_min: float = Field(ge=0)
     risk_atr_max: float = Field(gt=0)
@@ -123,6 +143,8 @@ class SetupParams(_Strict):
 
 
 class SwingParams(_Strict):
+    """The whole of config/swing.yaml."""
+
     params_version: str = Field(min_length=1, max_length=40)
     history_days: int = Field(ge=300)
     turnover_lookback_days: int = Field(ge=30)
@@ -146,6 +168,8 @@ class SwingParams(_Strict):
 
 
 class Level(BaseModel):
+    """One support or resistance zone in a snapshot."""
+
     model_config = ConfigDict(frozen=True)
 
     kind: Literal["support", "resistance"]

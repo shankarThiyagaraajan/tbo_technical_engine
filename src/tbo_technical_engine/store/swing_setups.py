@@ -11,11 +11,12 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbo_technical_engine.schemas.swing import Setup
-from tbo_technical_engine.tables import swing_setup as t
+from tbo_technical_engine.store.tables import swing_setup as t
 from tbo_technical_engine.utils.timefmt import z
 
 
 def price(value: Decimal) -> str:
+    """A price as the contract's decimal string."""
     return format(value, "f")
 
 
@@ -66,6 +67,7 @@ async def save(session: AsyncSession, setup: Setup) -> bool:
 
 
 async def latest_date(session: AsyncSession) -> date | None:
+    """The most recent setup date, or None."""
     found: date | None = (await session.execute(select(func.max(t.c.setup_date)))).scalar_one()
     return found
 

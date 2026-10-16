@@ -28,6 +28,8 @@ TrendState = Literal["up", "down", "sideways"]
 
 @dataclass(frozen=True)
 class Trend:
+    """Trend state and score for one stock."""
+
     state: TrendState
     score: int
     bull: float
@@ -38,6 +40,7 @@ class Trend:
 
 
 def assess(bars: Bars, p: TrendParams) -> Trend:
+    """Score the trend from EMAs, slope and ADX."""
     close = float(bars.close[-1])
     fast = float(indicators.get("ema", period=p.fast).batch(bars)[f"ema_{p.fast}"][-1])
     mid_series = indicators.get("ema", period=p.mid).batch(bars)[f"ema_{p.mid}"]

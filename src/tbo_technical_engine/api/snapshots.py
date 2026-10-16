@@ -52,6 +52,7 @@ async def list_snapshots(
     date: Annotated[date_type | None, Query()] = None,
     caller: Claims = requires("technical:read"),
 ) -> dict[str, Any]:
+    """List the snapshots served for a trade date."""
     after = _after(cursor)
     async with request.app.state.sessions() as session:
         as_of = await snapshot_store.serving(session, date)
@@ -68,6 +69,7 @@ async def get_snapshot(
     date: Annotated[date_type | None, Query()] = None,
     caller: Claims = requires("technical:read"),
 ) -> dict[str, Any]:
+    """Return one stock's snapshot for a trade date."""
     if not ISIN.fullmatch(isin):
         raise Problem("validation_failed", "Not an ISIN.", errors=[{"field": "isin", "message": "not an ISIN"}])
     async with request.app.state.sessions() as session:

@@ -15,4 +15,5 @@ def decimal_text(value: float, places: int = 6) -> str | None:
 
 
 def decimals(values: dict[str, float]) -> dict[str, str | None]:
+    """`decimal_text` applied to a name -> value map (an indicator snapshot)."""
     return {name: decimal_text(v) for name, v in values.items()}

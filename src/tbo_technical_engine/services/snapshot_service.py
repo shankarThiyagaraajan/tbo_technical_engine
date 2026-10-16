@@ -57,6 +57,8 @@ class IncompleteRun(RuntimeError):
 
 @dataclass
 class Summary:
+    """What one snapshot run did."""
+
     kind: Kind
     as_of: date | None = None
     universe: int = 0
@@ -72,16 +74,21 @@ class Summary:
 
 @dataclass(frozen=True)
 class Loaded:
+    """One stock's bars and the context its analysis needs."""
+
     measured: Measured
     bars: Bars
     turnover: float
 
 
 def midnight(day: date) -> datetime:
+    """Midnight UTC of a day."""
     return datetime.combine(day, time(0, 0), tzinfo=IST).astimezone(UTC)
 
 
 class SnapshotService:
+    """Runs the swing analysis for the whole universe and publishes the changes."""
+
     def __init__(
         self,
         feed: MarketFeedClient,

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, cast
 
-from sqlalchemy import delete, select
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbo_technical_engine.schemas.indicators import IndicatorSnapshot
-from tbo_technical_engine.tables import indicator_snapshot
+from tbo_technical_engine.store.tables import indicator_snapshot
 
 
 async def save(session: AsyncSession, snapshot: IndicatorSnapshot) -> None:
@@ -32,6 +33,7 @@ async def save(session: AsyncSession, snapshot: IndicatorSnapshot) -> None:
 
 
 async def latest(session: AsyncSession, isin: str, timeframe: str) -> IndicatorSnapshot | None:
+    """The newest stored snapshot of a stock and timeframe, or None."""
     row = (
         await session.execute(
             select(indicator_snapshot)
@@ -55,4 +57,4 @@ async def latest(session: AsyncSession, isin: str, timeframe: str) -> IndicatorS
 async def prune(session: AsyncSession, older_than: datetime) -> int:
     """Delete snapshots computed before `older_than`; returns how many."""
     result = await session.execute(delete(indicator_snapshot).where(indicator_snapshot.c.computed_at < older_than))
-    return int(result.rowcount or 0)  # type: ignore[attr-defined]
+    return int(cast("CursorResult[Any]", result).rowcount or 0)  # DELETE returns a CursorResult
