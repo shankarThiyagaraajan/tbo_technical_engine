@@ -16,6 +16,8 @@ MAX_PAGES = 20
 
 
 class FundamentalClient:
+    """Typed access to the fundamental engine; only the universe is needed here."""
+
     def __init__(self, client: ServiceClient) -> None:
         self.client = client
 

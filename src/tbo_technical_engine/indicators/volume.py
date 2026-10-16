@@ -17,6 +17,8 @@ from tbo_technical_engine.indicators.base import NAN, Indicator, Stream, full
 
 
 class VolumeAverage(Indicator):
+    """Average volume of the previous `period` bars, and the current bar's volume as a multiple of it."""
+
     def __init__(self, period: int = 20) -> None:
         if period < 2:
             raise ValueError("period must be at least 2")
@@ -47,6 +49,8 @@ class VolumeAverage(Indicator):
 
 
 class _VolStream:
+    """Live form of VolumeAverage."""
+
     def __init__(self, spec: VolumeAverage) -> None:
         self.spec = spec
         self.window: deque[float] = deque(maxlen=spec.period)

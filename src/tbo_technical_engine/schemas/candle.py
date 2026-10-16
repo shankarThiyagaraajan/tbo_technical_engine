@@ -32,6 +32,7 @@ class Candle(BaseModel):
 
     @property
     def key(self) -> tuple[str, str, datetime]:
+        """What identifies a candle: stock, timeframe and start; the revision says which copy of it is newest."""
         return (self.isin, self.timeframe, self.start_at)
 
 

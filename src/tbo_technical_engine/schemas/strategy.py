@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, time
 from typing import Literal
 
@@ -11,6 +12,8 @@ ParamValue = str | int | bool
 
 
 class StrategySpec(BaseModel):
+    """One strategy's entry in the file; unknown keys are refused so a typo cannot fall back to a default."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     title: str = Field(min_length=1, max_length=100)
@@ -31,8 +34,7 @@ class StrategyFile(BaseModel):
     @field_validator("strategies")
     @classmethod
     def _names(cls, value: dict[str, StrategySpec]) -> dict[str, StrategySpec]:
-        import re
-
+        """Strategy names are lower snake case (`orb_15m`): they appear in candidate IDs, events and URLs."""
         for name in value:
             if not re.fullmatch(r"[a-z][a-z0-9]*(_[a-z0-9]+)*", name) or len(name) > 60:
                 raise ValueError(f"not a strategy name: {name!r}")
@@ -47,24 +49,28 @@ class Params:
         self._values = values
 
     def number(self, name: str) -> float:
+        """A numeric parameter as float; a boolean is refused (`True` would silently read as 1.0)."""
         value = self._values[name]
         if isinstance(value, bool):
             raise ValueError(f"{name} is not a number")
         return float(value)
 
     def integer(self, name: str) -> int:
+        """An integer parameter; a float such as `9.0` is refused so a period can never be fractional."""
         value = self._values[name]
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError(f"{name} is not an integer")
         return value
 
     def flag(self, name: str) -> bool:
+        """A boolean parameter."""
         value = self._values[name]
         if not isinstance(value, bool):
             raise ValueError(f"{name} is not a boolean")
         return value
 
     def clock(self, name: str) -> time:
+        """A time-of-day parameter written `"HH:MM"` in the YAML (IST wall-clock; the caller applies the date)."""
         value = self._values[name]
         if not isinstance(value, str):
             raise ValueError(f"{name} is not a time")

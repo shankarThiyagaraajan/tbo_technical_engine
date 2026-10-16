@@ -15,6 +15,8 @@ from tbo_technical_engine.indicators.base import NAN, full
 
 
 class RelativeStrength:
+    """Stock return minus benchmark return over `period` bars, in percentage points."""
+
     def __init__(self, period: int = 20) -> None:
         if period < 1:
             raise ValueError("period must be at least 1")
@@ -22,6 +24,7 @@ class RelativeStrength:
         self.name = f"rel_strength_{period}"
 
     def batch(self, close: F64, benchmark: F64) -> F64:
+        """The series for two aligned arrays of closes; ValueError when their lengths differ."""
         if close.shape != benchmark.shape:
             raise ValueError("the stock and the benchmark need the same bars")
         n, p = len(close), self.period
@@ -35,6 +38,8 @@ class RelativeStrength:
 
 
 class RelativeStrengthStream:
+    """Live form: keeps the last period + 1 pairs of closes and compares the newest with the oldest."""
+
     def __init__(self, spec: RelativeStrength) -> None:
         self.spec = spec
         self.window: deque[tuple[float, float]] = deque(maxlen=spec.period + 1)

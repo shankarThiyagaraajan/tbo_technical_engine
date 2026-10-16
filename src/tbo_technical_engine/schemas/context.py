@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class IndexState(BaseModel):
+    """One index at the context time: its price, where it sits against its VWAP and its 15-minute trend."""
+
     model_config = ConfigDict(frozen=True)
 
     index_code: str
@@ -18,6 +20,8 @@ class IndexState(BaseModel):
 
 
 class Vix(BaseModel):
+    """India VIX level and its change from the previous close, in percent (decimal strings)."""
+
     model_config = ConfigDict(frozen=True)
 
     level: str
@@ -25,6 +29,8 @@ class Vix(BaseModel):
 
 
 class Breadth(BaseModel):
+    """How many universe stocks are up, down or flat today against the previous close."""
+
     model_config = ConfigDict(frozen=True)
 
     advancing: int = Field(ge=0)
@@ -33,6 +39,9 @@ class Breadth(BaseModel):
 
 
 class MarketContext(BaseModel):
+    """The market context; prices are decimal strings (never floats) as in the contract. `data_quality` is `degraded`
+    while candidates are suspended."""
+
     model_config = ConfigDict(frozen=True)
 
     context_at: str

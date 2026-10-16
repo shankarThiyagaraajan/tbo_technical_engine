@@ -15,7 +15,7 @@ from tbo_technical_engine.services.candle_buffer import CandleBuffer
 from tbo_technical_engine.services.context_service import CONTEXT_EVENT, ContextService, boundary_of
 from tbo_technical_engine.services.readiness import Readiness
 from tbo_technical_engine.services.universe import UniverseHolder
-from tbo_technical_engine.tables import market_context, outbox
+from tbo_technical_engine.store.tables import market_context, outbox
 from tests.strategies.builders import DAY
 from tests.support import CALENDAR, ISIN_A, ISIN_B, candle, session_start, trading_days_back
 

@@ -8,8 +8,8 @@ from __future__ import annotations
 from alembic import context
 from tbo_platform_kit.db import run_migrations
 
-from tbo_technical_engine.settings import SHORT_NAME, Settings
-from tbo_technical_engine.tables import metadata
+from tbo_technical_engine.config.settings import SHORT_NAME, Settings
+from tbo_technical_engine.store.tables import metadata
 
 settings = Settings()
 settings.require("database_url")

@@ -95,7 +95,7 @@ async def test_a_cold_stock_is_silent_but_keeps_collecting() -> None:
 @pytest.mark.parametrize("state", ["stale", "down", "connecting"])
 async def test_nothing_is_evaluated_while_the_feed_is_unhealthy(state: str) -> None:
     rig = Rig()
-    rig.readiness.on_feed_status(FeedStatus(state=state, changed_at=NOW))  # type: ignore[arg-type]
+    rig.readiness.on_feed_status(FeedStatus(state=state, changed_at=NOW))
     await rig.deliver(candle(ISIN_A, "5m", LIVE_START))
     assert rig.seen == []
 

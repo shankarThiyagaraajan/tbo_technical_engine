@@ -33,6 +33,9 @@ FiredKey = tuple[str, str, str]
 
 
 class StrategyEvaluator:
+    """Runs every active strategy on a closed 5-minute candle and turns their drafts into candidates. Pure of I/O:
+    storing and publishing belong to `SignalRunner`, so a replay or backtest can reuse it."""
+
     def __init__(
         self,
         engine: IndicatorEngine,
@@ -50,6 +53,7 @@ class StrategyEvaluator:
         """When (the entry candle's close) each strategy last produced a candidate for a stock and side."""
 
     def active(self) -> list[tuple[str, Strategy, Params]]:
+        """The active strategies with their parameters, in file order."""
         return [
             (name, self.registry[name], Params(spec.params))
             for name, spec in self.config.strategies.items()
@@ -57,6 +61,8 @@ class StrategyEvaluator:
         ]
 
     def context(self, candle: Candle) -> Context | None:
+        """Everything a strategy may look at for `candle`, or None when a newer candle has already arrived (then this
+        one is history, not an entry)."""
         recent = self.engine.recent(candle.isin, "5m")
         if not recent or recent[-1][0].start_at != candle.start_at:
             return None  # a newer candle has arrived since: this one is history, not an entry
@@ -79,6 +85,8 @@ class StrategyEvaluator:
         )
 
     def evaluate(self, candle: Candle, now: datetime) -> list[SignalCandidate]:
+        """Candidates for `candle`. Skips outside a strategy's entry window or inside its cooldown; a strategy that
+        raises is logged and the rest still run."""
         if candle.timeframe != "5m":
             return []
         close_at = candle.start_at + length("5m")

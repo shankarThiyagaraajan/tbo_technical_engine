@@ -12,7 +12,7 @@ from tbo_technical_engine.services.cooldowns import CooldownStore
 from tbo_technical_engine.services.evaluator import StrategyEvaluator
 from tbo_technical_engine.services.indicator_engine import IndicatorEngine
 from tbo_technical_engine.services.signal_runner import SIGNAL_CANDIDATE, SignalRunner
-from tbo_technical_engine.tables import outbox, signal_candidate
+from tbo_technical_engine.store.tables import outbox, signal_candidate
 from tests.strategies.session import CONFIG, History
 from tests.support import ISIN_A
 

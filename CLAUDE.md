@@ -21,15 +21,22 @@ same change as the code.
 ## Check before pushing
 
 ```sh
-uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest
+make check
 ```
+
+`make check` runs, in order (each is also its own target): `ruff check` (pycodestyle, pyflakes, isort, pyupgrade, bugbear,
+simplify, comprehensions, pydocstyle for module/class/function/package docstrings, security, McCabe complexity 10) ·
+`ruff format --check` · `mypy --strict` on `src` and `tests` · `bandit` on `src` · `pip-audit` on the locked dependencies
+(through `uv export`; the one ignored advisory has its reason in the Makefile) · `pytest` with an 80 percent coverage floor.
+`make hooks` installs a pre-commit hook (ruff, ruff format, mypy). Config lives in `pyproject.toml`; do not silence a
+rule inline without a reason next to it.
 
 ## Layout
 
 `src/tbo_technical_engine/`: `api/` routes (`stub.py` = 501 answers, removed as phases land) · `schemas/` pydantic (requests,
-internal records) · `clients/` (market feed, fundamental engine) · `consumers/` (`candle.closed`, `feed.status`) ·
-`indicators/` · `strategies/` (the five rules) · `context/` (pure market-context functions, index source seam) · `services/` (evaluator, signal runner, cooldowns) · `store/` · `utils/` · `apps/` (process entry points:
-`signal_worker`) · `tasks.py` (Celery) · `main.py` (api). `config/` holds `strategies.yaml`. `tests/` mirrors the package.
+internal records) · `config/` (`settings.py`: `Settings`, `REPOSITORY`, `SHORT_NAME`; no logic) · `clients/` (market feed, fundamental engine) · `consumers/` (`candle.closed`, `feed.status`) ·
+`indicators/` · `strategies/` (the five rules) · `context/` (pure market-context functions, index source seam) · `services/` (evaluator, signal runner, cooldowns) · `store/` (SQL; `tables.py` = the SQLAlchemy tables) · `utils/` · `apps/` (process entry points:
+`signal_worker`) · `tasks.py` (Celery) · `main.py` (api). The top-level `config/` holds `strategies.yaml`. `tests/` mirrors the package.
 
 ## CI is not run
 

@@ -25,7 +25,7 @@ def _candle(isin: str, tf: str, ts: int, o: float, h: float, low: float, c: floa
     q = Decimal("0.01")
     return Candle(
         isin=isin,
-        timeframe=tf,  # type: ignore[arg-type]
+        timeframe=tf,
         start_at=datetime.fromtimestamp(ts, UTC),
         open=Decimal(str(o)).quantize(q),
         high=Decimal(str(h)).quantize(q),
@@ -50,7 +50,7 @@ def aggregate(candles: Sequence[Candle], tf: str, size: int) -> list[Candle]:
         out.append(
             Candle(
                 isin=group[0].isin,
-                timeframe=tf,  # type: ignore[arg-type]
+                timeframe=tf,
                 start_at=group[0].start_at,
                 open=group[0].open,
                 high=max(c.high for c in group),

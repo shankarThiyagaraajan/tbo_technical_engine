@@ -17,6 +17,8 @@ from tbo_technical_engine.schemas.candle import Candle
 
 @dataclass(frozen=True)
 class IndexSeries:
+    """Recent candles of one index, with the previous session's daily candle for its CPR."""
+
     code: str
     """`nifty_50`, `nifty_bank`, ...: lower snake case, as the contract's index_code."""
     candles_5m: list[Candle]
@@ -27,20 +29,32 @@ class IndexSeries:
 
 @dataclass(frozen=True)
 class VixReading:
+    """India VIX now and at the previous close."""
+
     level: float
     previous_close: float
 
 
 @dataclass(frozen=True)
 class IndexSnapshot:
+    """Everything an `IndexSource` returns for one context run."""
+
     indices: list[IndexSeries] = field(default_factory=list)
     vix: VixReading | None = None
 
 
 class IndexSource(Protocol):
-    async def fetch(self, now: datetime) -> IndexSnapshot: ...
+    """Anything that can supply index and VIX data. A protocol so a real source can be added without touching the
+    context code."""
+
+    async def fetch(self, now: datetime) -> IndexSnapshot:
+        """Index data as of `now` (UTC)."""
+        ...
 
 
 class NoIndexSource:
+    """The default until the market feed carries indices: returns no data, so the context leaves those fields null."""
+
     async def fetch(self, now: datetime) -> IndexSnapshot:
+        """Always an empty snapshot."""
         return IndexSnapshot()

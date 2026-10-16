@@ -95,6 +95,7 @@ async def list_signals(
 
 @router.get("/v1/signals/{signal_id}")
 async def get_signal(request: Request, signal_id: str, caller: Claims = requires("technical:read")) -> dict[str, Any]:
+    """One stored candidate by its ULID; 404 `not_found` when there is none."""
     if not ULID.fullmatch(signal_id):
         raise Problem("validation_failed", "Not a signal ID.", errors=[{"field": "signal_id", "message": "not a ULID"}])
     async with request.app.state.sessions() as session:

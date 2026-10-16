@@ -8,8 +8,8 @@ import pytest
 from tbo_contracts import validate
 from tbo_platform_kit.testing import TestKeys
 
+from tbo_technical_engine.config.settings import REPOSITORY
 from tbo_technical_engine.schemas.context import Breadth, MarketContext
-from tbo_technical_engine.settings import REPOSITORY
 from tbo_technical_engine.store import context as store
 from tbo_technical_engine.utils.timefmt import z
 
@@ -56,7 +56,7 @@ async def test_latest_before_any_context_is_404(client: httpx.AsyncClient, read:
 async def test_history_is_oldest_first_and_pages(
     client: httpx.AsyncClient, read: dict[str, str], stored: list[datetime]
 ) -> None:
-    params = {"from": z(BASE), "to": z(BASE + timedelta(hours=1)), "limit": 2}
+    params: dict[str, str | int] = {"from": z(BASE), "to": z(BASE + timedelta(hours=1)), "limit": 2}
     first = (await client.get("/v1/context/history", params=params, headers=read)).json()
     assert [i["context_at"] for i in first["items"]] == [z(stored[0]), z(stored[1])] and first["next_cursor"]
     second = (

@@ -16,11 +16,14 @@ from tbo_platform_kit.http_server import Verifier, create_app, database_check, r
 from tbo_platform_kit.metrics import Metrics
 
 from tbo_technical_engine.api import context, research, signals, snapshots
+from tbo_technical_engine.config.settings import REPOSITORY, Settings
 from tbo_technical_engine.services.strategy_loader import load_strategies
-from tbo_technical_engine.settings import REPOSITORY, Settings
 
 
 def build_app(settings: Settings | None = None, *, verifier: Verifier | None = None) -> FastAPI:
+    """The API process: routers, a database and Redis behind the readiness check, and the shared objects the
+    routes read from `app.state`. Settings are required up front so a mis-set environment stops the start,
+    not a request."""
     settings = settings or Settings()
     settings.require("database_url", "redis_url")
     assert settings.redis_url is not None

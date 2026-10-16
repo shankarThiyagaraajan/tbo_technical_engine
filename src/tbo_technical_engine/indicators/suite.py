@@ -14,6 +14,8 @@ from tbo_technical_engine.indicators.base import Indicator, Stream
 
 
 class Suite:
+    """Indicators run together on one stock and timeframe; two indicators may not share an output name."""
+
     def __init__(self, indicators: Sequence[Indicator]) -> None:
         names = [o for ind in indicators for o in ind.outputs]
         if len(names) != len(set(names)):
@@ -43,6 +45,8 @@ class Suite:
 
 
 class SuiteStream:
+    """Live form of a Suite: one `update` feeds every member and merges their outputs."""
+
     def __init__(self, streams: list[Stream]) -> None:
         self.streams = streams
 

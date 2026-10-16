@@ -56,6 +56,7 @@ def breadth(buffer: CandleBuffer, isins: Iterable[str], day: date) -> Breadth:
 
 
 def price_text(value: float) -> str:
+    """A price as the contract's decimal string: rounded to paise, no exponent (`24012.5` -> `"24012.50"`)."""
     return format(Decimal(repr(round(value, 2))).quantize(CENT), "f")
 
 
@@ -102,6 +103,8 @@ def trend_15m(candles: list[Candle]) -> Literal["up", "down", "sideways"]:
 
 
 def vix_state(reading: VixReading | None) -> Vix | None:
+    """The VIX level and its change from the previous close in percent; None when the reading is missing,
+    not finite or the previous close is not positive (a percentage of zero means nothing)."""
     if reading is None or not all(math.isfinite(x) for x in (reading.level, reading.previous_close)):
         return None
     if reading.previous_close <= 0:

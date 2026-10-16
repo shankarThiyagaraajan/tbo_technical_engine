@@ -12,7 +12,7 @@ from tbo_technical_engine.indicators.bars import Bars
 from tbo_technical_engine.indicators.base import Indicator
 from tests.indicators.data import random_walk
 
-ALL: list[tuple[str, dict[str, object]]] = [
+ALL: list[tuple[str, dict[str, float]]] = [
     ("sma", {"period": 20}),
     ("ema", {"period": 9}),
     ("ema", {"period": 21}),
@@ -37,7 +37,7 @@ def year() -> Bars:
 
 
 @pytest.mark.parametrize(("name", "params"), ALL, ids=[f"{n}-{i}" for i, (n, _) in enumerate(ALL)])
-def test_batch_equals_streaming_for_a_year(year: Bars, name: str, params: dict[str, object]) -> None:
+def test_batch_equals_streaming_for_a_year(year: Bars, name: str, params: dict[str, float]) -> None:
     indicator: Indicator = indicators.get(name, **params)
     batch = indicator.batch(year)
     stream = indicator.stream()

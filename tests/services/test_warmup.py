@@ -33,7 +33,7 @@ async def test_history_fills_the_buffer_and_stocks_become_warm() -> None:
 
 
 async def test_a_stock_with_too_little_history_stays_cold() -> None:
-    thin = [c for c in session_candles(ISIN_A, "5m", date(2026, 10, 14))]
+    thin = list(session_candles(ISIN_A, "5m", date(2026, 10, 14)))
     result = await warm_up(FakeFeed(thin).client(), CandleBuffer(), [ISIN_A], NOW, CALENDAR, WarmupSpec())
     assert result.cold == {ISIN_A} and not result.warm
 

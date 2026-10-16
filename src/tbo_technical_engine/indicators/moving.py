@@ -20,12 +20,15 @@ def _x(bars: Bars, source: Source) -> F64:
 
 
 def _check(period: int) -> int:
+    """Reject a period under 2: a one-bar average is the price itself and hides a mistake."""
     if period < 2:
         raise ValueError("period must be at least 2")
     return period
 
 
 class Sma(Indicator):
+    """Simple moving average of the last `period` values of `source` (default the close)."""
+
     def __init__(self, period: int, source: Source = "close") -> None:
         self.period = _check(period)
         self.source: Source = source
@@ -52,6 +55,8 @@ class Sma(Indicator):
 
 
 class _SmaStream:
+    """Live form of Sma: a sliding window of the last `period` values."""
+
     def __init__(self, spec: Sma) -> None:
         self.spec = spec
         self.window: deque[float] = deque(maxlen=spec.period)
@@ -63,6 +68,9 @@ class _SmaStream:
 
 
 class Ema(Indicator):
+    """Exponential moving average with k = 2 / (period + 1), seeded with the SMA of the first `period` values (the
+    TA-Lib convention)."""
+
     def __init__(self, period: int, source: Source = "close") -> None:
         self.period = _check(period)
         self.source: Source = source
@@ -94,6 +102,8 @@ class Ema(Indicator):
 
 
 class _EmaStream:
+    """Live form of Ema: collects the seed window, then applies the recurrence one bar at a time."""
+
     def __init__(self, spec: Ema) -> None:
         self.spec = spec
         self.k = 2.0 / (spec.period + 1)

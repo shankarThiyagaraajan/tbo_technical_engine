@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -20,7 +20,7 @@ FOURTH = "INE009A01021"
 FIFTH = "INE090A01021"
 
 
-def at(day, i: int):  # type: ignore[no-untyped-def]
+def at(day: date, i: int) -> datetime:
     return session_start(day) + timedelta(minutes=5 * i)
 
 
@@ -36,7 +36,7 @@ def test_breadth_counts_stocks_against_yesterdays_close() -> None:
     assert (got.advancing, got.declining, got.unchanged) == (1, 1, 1)
 
 
-def bars(day, closes: list[float], volume: int = 1000) -> list[Candle]:  # type: ignore[no-untyped-def]
+def bars(day: date, closes: list[float], volume: int = 1000) -> list[Candle]:
     return [candle("nifty_50", "5m", at(day, i), f"{c:.2f}", volume=volume) for i, c in enumerate(closes)]
 
 
