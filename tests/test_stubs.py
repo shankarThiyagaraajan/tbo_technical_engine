@@ -21,6 +21,7 @@ IMPLEMENTED: tuple[str, ...] = (
     "/v1/context",
     "/v1/snapshots",
     "/v1/swing-setups",
+    "/v1/backtests",
 )
 OPERATIONS = [
     (method.upper(), path, op["security"][0]["bearerAuth"][0])

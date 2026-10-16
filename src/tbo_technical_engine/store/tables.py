@@ -106,3 +106,59 @@ swing_setup = Table(
     UniqueConstraint("isin", "setup_date", name="uq_swing_setup_isin_date"),
 )
 Index("ix_swing_setup_date", swing_setup.c.setup_date, swing_setup.c.isin)
+
+# TE5: backtest runs, their trades, and the per-strategy evidence the decision engine attaches to a call.
+backtest = Table(
+    "backtest",
+    metadata,
+    Column("backtest_id", String(26), primary_key=True),
+    Column("status", String(10), nullable=False),
+    Column("strategy", String(60), nullable=False),
+    Column("params_version", String(40), nullable=False),
+    Column("params_overrides", JSON, nullable=False),
+    Column("from_date", Date, nullable=False),
+    Column("to_date", Date, nullable=False),
+    Column("isins", JSON, nullable=False),
+    Column("metrics", JSON, nullable=True),
+    # Everything else a run produces: coverage, costs schedule and status, settings used, walk-forward, stats.
+    Column("result", JSON, nullable=True),
+    Column("code_version", String(60), nullable=False),
+    Column("backend", String(10), nullable=False),
+    Column("error", String(500), nullable=True),
+    Column("requested_by", String(100), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("started_at", DateTime(timezone=True), nullable=True),
+    Column("finished_at", DateTime(timezone=True), nullable=True),
+)
+Index("ix_backtest_status", backtest.c.status)
+Index("ix_backtest_created", backtest.c.created_at.desc(), backtest.c.backtest_id.desc())
+
+backtest_trade = Table(
+    "backtest_trade",
+    metadata,
+    Column("backtest_id", String(26), primary_key=True),
+    Column("trade_no", Integer, primary_key=True),
+    Column("isin", String(12), nullable=False),
+    Column("side", String(4), nullable=False),
+    Column("entry_at", DateTime(timezone=True), nullable=False),
+    Column("exit_at", DateTime(timezone=True), nullable=False),
+    Column("entry_price", Numeric(14, 2), nullable=False),
+    Column("exit_price", Numeric(14, 2), nullable=False),
+    Column("exit_reason", String(20), nullable=False),
+    Column("r_multiple", Numeric(12, 4), nullable=False),
+    Column("gross_r", Numeric(12, 4), nullable=False),
+    Column("quantity", Integer, nullable=False),
+    Column("costs", Numeric(14, 2), nullable=False),
+)
+
+# The latest evidence per (strategy, params_version): written when a backtest at the file's own parameters (no
+# overrides) succeeds. One row, replaced, so the decision engine always reads the newest.
+strategy_evidence = Table(
+    "strategy_evidence",
+    metadata,
+    Column("strategy", String(60), primary_key=True),
+    Column("params_version", String(40), primary_key=True),
+    Column("backtest_id", String(26), nullable=False),
+    Column("data", JSON, nullable=False),
+    Column("computed_at", DateTime(timezone=True), nullable=False),
+)

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import importlib
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from types import ModuleType
+from typing import Any
 
 import pytest
 from tbo_platform_kit.celery_app import ResearchBlackout, research_task
@@ -81,3 +82,47 @@ def test_an_incomplete_run_is_retried_not_swallowed(tasks: ModuleType, monkeypat
     monkeypatch.setattr(tasks, "run_job", broken)
     with pytest.raises(IncompleteRun):  # called directly, a retry re-raises; in a worker it schedules the next attempt
         tasks.daily_snapshot()
+
+
+def test_a_backtest_never_outlives_the_brokers_redelivery_window(tasks: ModuleType) -> None:
+    """The broker hands an unacknowledged task to a second worker after 3600 s; a job must end before that."""
+    assert tasks.run_backtest.time_limit < 3600
+    assert tasks.run_backtest.soft_time_limit < tasks.run_backtest.time_limit
+
+
+def test_beat_resends_backtests_whose_send_was_lost(tasks: ModuleType) -> None:
+    entry = tasks.celery.conf.beat_schedule["requeue_waiting_backtests"]
+    assert (
+        entry["task"] == "technical.requeue_waiting_backtests" and entry["options"]["queue"] == "technical.maintenance"
+    )
+
+
+async def test_the_sweep_sends_only_queued_jobs_older_than_five_minutes(
+    tasks: ModuleType, monkeypatch: pytest.MonkeyPatch, sessions: Any
+) -> None:
+    from tbo_technical_engine.store import backtests as store
+
+    old = datetime.now(UTC) - timedelta(minutes=10)
+    async with sessions() as session, session.begin():
+        for backtest_id, created in (
+            ("01J00000000000000000000001", old),
+            ("01J00000000000000000000002", datetime.now(UTC)),
+        ):
+            await store.create(
+                session,
+                backtest_id=backtest_id,
+                strategy="orb_15m",
+                params_version="v",
+                params_overrides=[],
+                from_date=date(2026, 10, 1),
+                to_date=date(2026, 10, 2),
+                isins=[],
+                code_version="0",
+                backend="vectorbt",
+                requested_by="t",
+                now=created,
+            )
+    sent: list[str] = []
+    monkeypatch.setattr(tasks.run_backtest, "delay", sent.append)
+    assert await tasks._requeue() == 1
+    assert sent == ["01J00000000000000000000001"]

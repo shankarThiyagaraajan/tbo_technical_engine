@@ -6,7 +6,7 @@ Queues are `technical.<purpose>`; every task must be idempotent (a killed worker
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
+from datetime import date, timedelta
 
 import redis.asyncio as aioredis
 from celery import Task
@@ -14,12 +14,21 @@ from tbo_platform_kit.calendar import now_utc
 from tbo_platform_kit.celery_app import create_celery, crontab_ist, every, queue_name, research_task
 from tbo_platform_kit.db import create_engine, session_factory
 from tbo_platform_kit.events import EventPublisher
+from tbo_platform_kit.http_client import IssuerTokenProvider, ServiceClient
 
 from tbo_technical_engine import outbox
+from tbo_technical_engine.backtest.costs import load_costs
+from tbo_technical_engine.backtest.engine import DayRules
+from tbo_technical_engine.clients import fundamental
 from tbo_technical_engine.config.settings import REPOSITORY, SHORT_NAME, Settings
+from tbo_technical_engine.services import backtests as backtest_service
+from tbo_technical_engine.services import point_in_time
 from tbo_technical_engine.services.snapshot_job import run_job
 from tbo_technical_engine.services.snapshot_service import IncompleteRun, Kind
+from tbo_technical_engine.services.strategy_loader import load_strategies
+from tbo_technical_engine.store import backtests as backtest_store
 from tbo_technical_engine.store import indicators as indicator_store
+from tbo_technical_engine.store.research_cache import ResearchCache
 
 settings = Settings()
 celery = create_celery(settings)
@@ -46,8 +55,10 @@ celery.conf.beat_schedule = {
         "schedule": crontab_ist(8, 0),
         "options": {"queue": SWING},
     },
+    "requeue_waiting_backtests": every(300, f"{SHORT_NAME}.requeue_waiting_backtests", queue=MAINTENANCE),
 }
 SNAPSHOT_RETENTION = timedelta(days=14)
+REQUEUE_AFTER = timedelta(minutes=5)
 
 
 async def _flush() -> int:
@@ -70,14 +81,78 @@ def flush_outbox() -> int:
 
 RESEARCH = queue_name(SHORT_NAME, "research")
 """Backtests run on their own queue and workers, so they cannot slow down live signals (plan, security notes)."""
+BACKTEST_SETTINGS = backtest_service.load_settings(settings.backtest_file)
+BACKTEST_SOFT_LIMIT = BACKTEST_SETTINGS.caps.max_runtime_seconds + 120
+"""The job stops itself at `max_runtime_seconds` (between stocks); these limits catch one stock that never returns. Both
+stay under the broker's 3600 s redelivery window, so a running job is never handed to a second worker."""
 
 
-@celery.task(name=f"{SHORT_NAME}.run_backtest", queue=RESEARCH)
+async def _run_backtest(backtest_id: str) -> str:
+    engine = create_engine(settings)
+    funds_http = None
+    rules: backtest_service.RulesLoader | None = None
+    if settings.fundamental_url is not None:
+        funds_http = ServiceClient(
+            str(settings.fundamental_url),
+            audience=fundamental.AUDIENCE,
+            scopes=fundamental.SCOPES,
+            tokens=IssuerTokenProvider.from_settings(settings),
+        )
+        client = fundamental.FundamentalClient(funds_http)
+
+        async def rules(start: date, end: date) -> DayRules:
+            return await point_in_time.load_rules(client, start, end)
+
+    try:
+        runner = backtest_service.BacktestRunner(
+            session_factory(engine),
+            load_strategies(settings.strategies_file),
+            BACKTEST_SETTINGS,
+            load_costs(settings.costs_file),
+            ResearchCache(settings.research_cache_dir),
+            rules,
+        )
+        return await runner.execute(backtest_id)
+    finally:
+        if funds_http is not None:
+            await funds_http.aclose()
+        await engine.dispose()
+
+
+@celery.task(
+    name=f"{SHORT_NAME}.run_backtest",
+    queue=RESEARCH,
+    soft_time_limit=BACKTEST_SOFT_LIMIT,
+    time_limit=BACKTEST_SOFT_LIMIT + 60,
+)
 @research_task(settings.profile)
 def run_backtest(backtest_id: str) -> str:
-    """TE5. The decorator is the mode wiring: in paper and live this raises ResearchBlackout from 09:00 to 15:45 IST
-    (weekdays), so research never competes with live signals; in lab it always runs."""
-    raise NotImplementedError("backtests are built in TE5")
+    """Run one queued backtest. The decorator is the mode wiring: in paper and live this raises ResearchBlackout from
+    09:00 to 15:45 IST (weekdays), so research never competes with live signals; in lab it always runs. Idempotent: a
+    finished job is left alone, and a running one is claimed only when its worker is long gone (`BacktestRunner`)."""
+    return asyncio.run(_run_backtest(backtest_id))
+
+
+async def _requeue() -> int:
+    engine = create_engine(settings)
+    try:
+        async with session_factory(engine)() as session:
+            ids = await backtest_store.waiting(session, now_utc() - REQUEUE_AFTER)
+    finally:
+        await engine.dispose()
+    for backtest_id in ids:
+        run_backtest.delay(backtest_id)
+    return len(ids)
+
+
+@celery.task(name=f"{SHORT_NAME}.requeue_waiting_backtests", queue=MAINTENANCE)
+def requeue_waiting_backtests() -> int:
+    """Send again every backtest still `queued` after a few minutes: the API commits the row before it sends the job, so
+    a send that failed (Redis down) would otherwise wait for ever. Idempotent: `run_backtest` skips a job that is
+    already running or done. Does nothing while research is blacked out."""
+    if not settings.profile.research_allowed(now_utc()):
+        return 0
+    return asyncio.run(_requeue())
 
 
 async def _prune() -> int:

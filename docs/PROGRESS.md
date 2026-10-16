@@ -12,7 +12,8 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 | TE3 Intraday strategy engine | Built. The five strategies (`ema_9_21_crossover`, `vwap_breakout`, `orb_15m`, `pivot_supertrend`, `vwap_pivot`), long and short, as pure rules over a context; parameters and `params_version` in `config/strategies.yaml`; entry windows (09:30-14:30 IST, ORB to 11:30) and per-strategy cooldowns (30 min; ORB once a session); cooldown checkpoint in Redis; candidates stored in `signal_candidate` and announced as `signal.candidate.v1` through the outbox; `GET /v1/signals`, `/v1/signals/{id}`, `/v1/strategies`. A replayed or restarted session gives identical candidates (tested). Not done: gate 3 (chart review of 10 recorded sessions) needs real recorded sessions. |
 | TE4 Market context | Built, with one gap. Breadth over the universe (advancing/declining/unchanged against the previous close), data quality from the feed's health, CPR day class, index states (VWAP side, 15-minute trend) and the VIX change, published as `market.context.v1` every 5 minutes from 09:15 to 15:30 IST (once per boundary, stored in `market_context`); `GET /v1/context` and `/v1/context/history`. **The market feed has no index or VIX data**, so index states, VIX and CPR class are empty/null until an `IndexSource` exists; the code and tests for them run on fake index data. Exit criterion (5 sessions on time, matched by hand) needs live sessions. |
 | TE6 Swing analysis and daily snapshot | Built (branch `claude/technical-te6-9kz86w`), tested on fixtures and a fake feed with a real PostgreSQL and Redis; no real feed or recorded history yet. `swing/` (pure): trend state and score, relative-strength percentile, support and resistance zones, ATR % and its one-year percentile, volatility regime, Bollinger squeeze, 20-day traded value and a Corwin-Schultz spread estimate, and three long-only setup detectors (base breakout, pullback to the 20 or 50 EMA, 52-week high breakout). `SnapshotService` runs at 16:00 IST (snapshots + setups) and 08:00 IST (snapshot refresh) as Celery tasks on the new `technical.swing` queue; announces `technical.snapshot.v1` and `swing.setup.v1` through the outbox; `GET /v1/snapshots`, `/v1/snapshots/{isin}`, `/v1/swing-setups`. Parameters in `config/swing.yaml`. 500 stocks are measured and ranked in about two seconds (the daily-candle fetch is the rest of the half hour). Exit criterion 2 (30 setups reviewed) is prepared as `docs/swing-review-sample.md` on fixtures; the review on recorded data waits for recorded sessions. |
-| TE5, TE7, TE8 | Not built (TE5 needs the broker cost figures; it is on its own branch) |
+| TE5 Backtesting and research | Built (branch `claude/technical-te5-0p6q89`), checked locally only (CI did not run). `POST /v1/backtests`, `GET /v1/backtests/{id}` and `/trades` replace the stubs (scope `technical:research`, `Idempotency-Key`); the job runs on the `technical.research` queue and replays each stock through the live `StrategyEvaluator`, `IndicatorEngine` and `CandleBuffer` (a test proves its candidates equal the live worker's). Fills, exits, slippage and the Indian intraday cost model (`config/costs.yaml`) turn candidates into trades; metrics are in R, after charges. Walk-forward with a parameter grid (`config/backtest.yaml`), out-of-sample reported apart, parameter stability, vectorbt return statistics, per-strategy evidence summary in `strategy_evidence`, caps on stocks, days, stock-days and concurrent jobs, a job time budget, and a Beat sweep that re-sends lost jobs. `scripts/backtest_report.py` writes the Markdown report. **Not done:** the exit criterion (a 12-month report on all five strategies) needs recorded candles and none exist yet, and the costs are a **placeholder** until the owner confirms them (see Decisions and Open items). |
+| TE7, TE8 | Out of scope for the current build |
 
 ## Decisions
 
@@ -58,7 +59,43 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   narrow below 0.25, wide above 0.5 (settings `cpr_narrow_pct`, `cpr_wide_pct`; starting values, no source for them in the plan).
   The class is fixed at 09:15 and kept for the day. The strategy filter `vwap_pivot.require_index` reads the same index state.
 
+- **TE5: what a backtest assumes** (all in `config/backtest.yaml`, all stored with each result; the plan is silent on them).
+  The signal is known at its candle's close; a limit order at the far edge of the entry zone lives one candle (fills at the open if
+  the open is already better, else at the limit if reached, else no trade); slippage 2 bps against the trader on every fill; target 1
+  sells half, then the stop on the rest moves to the entry; open trades leave at the open of the 15:15 candle; a candle touching both
+  stop and target counts as the stop (adverse first, also on the fill candle); a fill beyond the stop is no trade; one trade at a time
+  per stock and strategy; 100,000 rupees a trade. Rounded numbers: Decimal, prices to 0.01.
+- **TE5: `avg_r` is before charges, `expectancy_r` after.** The contract has both and does not say; the pair shows the cost drag.
+  The decision engine should judge a strategy by `expectancy_r`.
+- **TE5: replay and walk-forward.** A parameter set is replayed once over the whole range and its trades are cut into windows by entry
+  date, which equals running each window apart (the strategies are pure; cooldown and open positions never survive a session). Daily
+  candles join the replay buffer when their day has ended (as the 09:00 warm-up does); a test compares the replay with the live worker.
+  Folds: 60 sessions of train, 20 of test, moving by 20; a fold picks the grid point with the best train expectancy (at least 10
+  trades, ties to the file's values); out-of-sample is the pooled test windows only. `stable` = every one-parameter neighbour reached
+  80% of the best train expectancy. Sessions are the dates that have candles, not a holiday calendar (the kit's holiday file is empty).
+- **TE5: point-in-time rules** come from `GET /v1/gate?date=` for each weekday when no ISINs are listed (the stock must be in that
+  day's gate; `block` / `long_only` / `short_only` filter the side after the cooldown, as in live). With ISINs listed there is no gate.
+  A job with no ISINs and no `TBO_TECHNICAL_FUNDAMENTAL_URL` fails with that reason.
+- **TE5: vectorbt** is used for the return statistics (Sharpe, drawdown %) on a reference capital, not for the fill loop: exits depend
+  on the path (target 1, then a stop at entry), which `from_signals` cannot express. `plotly<6` is pinned because vectorbt 0.28 fails
+  to import with plotly 6. The image grows (pandas, numba, scipy, matplotlib come with it).
+- **TE5: limits.** `max_runtime_seconds` is 3300 because the Redis broker redelivers an unacknowledged task after 3600 s; a longer
+  job would run twice. Other parameter sets run only if the first run's duration times their number fits the budget, else the result
+  says `grid_skipped`. Replay costs about 0.07 s per stock-session (measured on synthetic data), so one year of 500 stocks is hours:
+  that is TE7's job. Profile: `StrategyEvaluator.context` re-filters the whole 1,000-candle series with `astimezone` on every candle
+  and takes about 60% of the replay time.
+- **TE5: served and stored.** The contract's `Backtest` carries six metrics. Coverage, costs status, walk-forward folds, statistics and
+  the evidence summary are stored (`backtest.result`, `strategy_evidence`) but not served: that needs a `tbo_contracts` change, proposed
+  in `docs/te5-contract-proposal.md`. A re-run of a finished job is a no-op; a running job is re-claimable only after 56 minutes.
+
 ## Open items
+
+- **TE5 needs the owner's trading costs.** `config/costs.yaml` holds Zerodha's published intraday schedule (zerodha.com/charges, read
+  2026-10-15, no "last updated" date on the page) as a placeholder; every result says `costs.status: placeholder`. Replace the figures
+  with the broker actually used and set `status: confirmed`.
+- **TE5 exit criterion is open:** no recorded candles exist yet (the research cache `.dev/research_cache` fills at warm-up once the feed
+  runs). Run `scripts/backtest_report.py --from <date> --to <date>` when 12 months are there; it states the coverage it found.
+- **TE5 contract change to decide:** serve the evidence summary and the extra result fields (`docs/te5-contract-proposal.md`).
 
 - **No index or VIX in the market feed contract (blocks the index half of TE4 and `vwap_pivot`'s index filter).** Options: the feed adds index
   and VIX instruments (a contract change, then an `IndexSource` over its REST API), or this service gets its own source. Not decided; not done
