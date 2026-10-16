@@ -1,8 +1,9 @@
 """The signal worker process: `uv run python -m tbo_technical_engine.apps.signal_worker`.
 
 One process handles the whole universe (plan: "one signal worker at the planned scale"). It runs three consumers
-(candles, feed health, universe) and a supervisor that warms the buffer from REST history. Every evaluated candle
-goes to the indicator recorder, then to the strategies (`SignalRunner`).
+(candles, feed health, universe), a supervisor that warms the buffer from REST history, and the indicator recorder's
+write loop. Every evaluated candle goes to the indicator recorder (a snapshot in memory), then to the strategies
+(`SignalRunner`).
 """
 
 from __future__ import annotations
@@ -83,11 +84,13 @@ class SignalWorker:
             calendar,
             now_utc,
             cache=ResearchCache(settings.research_cache_dir),
-        )
+        )  # `prime` is set below, once the indicator engine exists
         name = f"{socket.gethostname()}-{id(self) % 10000}"
         profile = settings.profile
         self.engine = IndicatorEngine(self.buffer)
-        self.ingest.evaluators.append(IndicatorRecorder(self.engine, sessions, now_utc))
+        self.supervisor.prime = self.engine.prime
+        self.recorder = IndicatorRecorder(self.engine, sessions, now_utc)
+        self.ingest.evaluators.append(self.recorder)
         self.evaluator = StrategyEvaluator(self.engine, self.buffer, load_strategies(settings.strategies_file))
         publisher = EventPublisher(redis, profile, source=REPOSITORY, metrics=metrics)
         self.context = ContextService(
@@ -143,7 +146,10 @@ class SignalWorker:
     async def run(self, stop: asyncio.Event) -> None:
         """Run the three stream consumers and the supervisor until `stop` is set, then wait for them to finish."""
         log.info("signal_worker_started", mode=self.settings.profile.mode.value)
-        tasks = [asyncio.create_task(c.run(stop)) for c in self.consumers] + [asyncio.create_task(self.supervise(stop))]
+        tasks = [asyncio.create_task(c.run(stop)) for c in self.consumers] + [
+            asyncio.create_task(self.supervise(stop)),
+            asyncio.create_task(self.recorder.run(stop)),
+        ]
         await stop.wait()
         for task in tasks:
             await task
