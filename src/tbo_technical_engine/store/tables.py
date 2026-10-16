@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
-from sqlalchemy import JSON, Column, Date, DateTime, Index, Integer, Numeric, String, Table, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+)
 from tbo_platform_kit.db import component_metadata
 
 from tbo_technical_engine.config.settings import SHORT_NAME
@@ -161,4 +175,26 @@ strategy_evidence = Table(
     Column("backtest_id", String(26), nullable=False),
     Column("data", JSON, nullable=False),
     Column("computed_at", DateTime(timezone=True), nullable=False),
+)
+
+# One row per 5-minute boundary (TE8): how many of the universe's candles were evaluated, why the others
+# were not, and the latency of those that were (candle close to the end of evaluation). Written by the signal
+# worker, read by the API.
+evaluation_boundary = Table(
+    "evaluation_boundary",
+    metadata,
+    Column("boundary_at", DateTime(timezone=True), primary_key=True),
+    Column("trade_date", Date, nullable=False),
+    Column("expected", Integer, nullable=False),
+    Column("evaluated", Integer, nullable=False),
+    Column("stale", Integer, nullable=False),
+    Column("cold", Integer, nullable=False),
+    Column("inactive", Integer, nullable=False),
+    Column("failed", Integer, nullable=False),
+    Column("absent", Integer, nullable=False),
+    Column("suspended", Boolean, nullable=False),
+    Column("p50_seconds", Float, nullable=True),
+    Column("p95_seconds", Float, nullable=True),
+    Column("max_seconds", Float, nullable=True),
+    Column("written_at", DateTime(timezone=True), nullable=False),
 )

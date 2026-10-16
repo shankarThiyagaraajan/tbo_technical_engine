@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from redis.asyncio import Redis
+from redis.exceptions import ResponseError
 from sqlalchemy.ext.asyncio import AsyncSession
-from tbo_platform_kit.events import EventConsumer
+from tbo_platform_kit.events import EventConsumer, Outcome
+from tbo_platform_kit.logging import get_logger
 from tbo_platform_kit.metrics import Metrics
 from tbo_platform_kit.mode import ModeProfile
 
@@ -16,9 +19,34 @@ from tbo_technical_engine.services.ingest import CandleIngest
 from tbo_technical_engine.services.readiness import Readiness
 from tbo_technical_engine.services.universe import UniverseHolder
 
+log = get_logger(__name__)
 CANDLE_STREAM = "tbo.market_feed.candle"
 FEED_STREAM = "tbo.market_feed.feed"
 UNIVERSE_STREAM = "tbo.fundamental.universe"
+
+
+class RecreatingConsumer(EventConsumer):
+    """The kit's consumer, plus: when Redis comes back without its data (a lost volume, a flush) the group is gone and
+    every read fails with NOGROUP. The kit caches that the group exists and would retry for ever; this one creates it
+    again and tells `on_group_lost` (TE8 drill: Redis restart without persistence)."""
+
+    def __init__(self, *args: Any, on_group_lost: Callable[[], None] | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.on_group_lost = on_group_lost
+
+    async def run_once(self, block_ms: int | None = None) -> list[Outcome]:
+        """One cycle of the kit's consumer; a missing group is recreated and the cycle ends empty."""
+        try:
+            return await super().run_once(block_ms)
+        except ResponseError as exc:
+            if "NOGROUP" not in str(exc):
+                raise
+            log.warning("consumer_group_lost", stream=self.stream, group=self.group)
+            self._group_ready = False
+            await self.ensure_group()
+            if self.on_group_lost is not None:
+                self.on_group_lost()
+            return []
 
 
 def candle_consumer(
@@ -27,9 +55,12 @@ def candle_consumer(
     # start_id "$": a new group reads only what arrives from now on; history comes from REST at warm-up, not from
     # replaying three days of stream. An existing group resumes where it stopped.
     """Reads `candle.closed` events and hands each to the ingest, which stores and evaluates it."""
-    return EventConsumer(
+    # A recreated group starts at `$`, so the candles published while it was missing never arrive: ask for a fresh
+    # warm-up, which reads them back over REST.
+    return RecreatingConsumer(
         redis,
         profile,
+        on_group_lost=ingest.readiness.request_warmup,
         stream=CANDLE_STREAM,
         group="technical.candles",
         consumer=name,
@@ -47,7 +78,7 @@ def feed_consumer(
     async def handle(event: dict[str, Any], session: AsyncSession | None) -> None:
         readiness.on_feed_status(FeedStatus.model_validate(event["data"]))
 
-    return EventConsumer(
+    return RecreatingConsumer(
         redis, profile, stream=FEED_STREAM, group="technical.feed", consumer=name, handler=handle, metrics=metrics
     )
 
@@ -72,7 +103,7 @@ def universe_consumer(
         if universe.offer(snapshot):
             buffer.forget(before - universe.isins)
 
-    return EventConsumer(
+    return RecreatingConsumer(
         redis,
         profile,
         stream=UNIVERSE_STREAM,

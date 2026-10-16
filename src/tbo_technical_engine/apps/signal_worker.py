@@ -2,8 +2,9 @@
 
 One process handles the whole universe (plan: "one signal worker at the planned scale"). It runs three consumers
 (candles, feed health, universe), a supervisor that warms the buffer from REST history, and the indicator recorder's
-write loop. Every evaluated candle goes to the indicator recorder (a snapshot in memory), then to the strategies
-(`SignalRunner`).
+write loop. Each 5-minute candle's outcome goes to the latency tracker; the supervise loop turns closed boundaries into
+`evaluation_boundary` rows (TE8). Every evaluated candle goes to the indicator recorder (a snapshot in memory),
+then to the strategies (`SignalRunner`).
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from tbo_technical_engine.services.cooldowns import CooldownStore
 from tbo_technical_engine.services.evaluator import StrategyEvaluator
 from tbo_technical_engine.services.indicator_engine import IndicatorEngine
 from tbo_technical_engine.services.ingest import CandleIngest
+from tbo_technical_engine.services.latency import LatencyRecorder, LatencyTracker
 from tbo_technical_engine.services.readiness import Readiness
 from tbo_technical_engine.services.recorder import IndicatorRecorder
 from tbo_technical_engine.services.signal_runner import SignalRunner
@@ -75,6 +77,9 @@ class SignalWorker:
             now_utc,
             max_age=timedelta(seconds=settings.max_candle_age_seconds),
         )
+        self.tracker = LatencyTracker(calendar, now_utc)
+        self.ingest.tracker = self.tracker
+        self.latency = LatencyRecorder(sessions)
         self.supervisor = WarmupSupervisor(
             feed,
             self.buffer,
@@ -136,6 +141,8 @@ class SignalWorker:
                 await self.ensure_universe(now_utc().astimezone(IST).date())
                 await self.supervisor.tick()
                 await self.context.tick()
+                self.latency.add(self.tracker.close_due(len(self.universe.isins), self.readiness.feed_healthy))
+                await self.latency.flush()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # one bad tick must not end the worker

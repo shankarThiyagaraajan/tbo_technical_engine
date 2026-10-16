@@ -106,6 +106,7 @@ async def sessions(app: Any) -> Any:
     async with factory() as session, session.begin():
         tables = (
             "indicator_snapshot",
+            "evaluation_boundary",
             "signal_candidate",
             "market_context",
             "technical_snapshot",
