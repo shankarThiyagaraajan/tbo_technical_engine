@@ -21,7 +21,8 @@ def main() -> None:
     )
     uvicorn.run(
         build_app(settings),
-        host="0.0.0.0",  # noqa: S104  # nosec B104 - inside its container, on the stack's internal network only
+        # Inside its container, on the stack's internal network only.
+        host="0.0.0.0",  # noqa: S104  # nosec B104
         port=8000,
         log_config=None,
         proxy_headers=False,
