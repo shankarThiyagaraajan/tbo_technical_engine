@@ -38,7 +38,8 @@ COPY contract contract
 COPY config config
 COPY alembic.ini alembic.ini
 COPY migrations migrations
-ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# vectorbt compiles with numba cache=True; the container filesystem is read-only, so the cache goes on the /tmp tmpfs.
+ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 NUMBA_CACHE_DIR=/tmp/numba
 USER 10001
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --retries=6 \
