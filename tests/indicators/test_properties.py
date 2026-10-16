@@ -13,15 +13,17 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from tbo_technical_engine import indicators
-from tbo_technical_engine.indicators.bars import Bars
+from tbo_technical_engine.indicators.bars import F64, Bars
 from tests.indicators.data import from_ohlcv
+
+BarRows = list[tuple[float, float, float, float, float]]
 
 price = st.floats(min_value=0.05, max_value=100_000, allow_nan=False, allow_infinity=False)
 volume = st.one_of(st.just(0.0), st.integers(1, 5_000_000).map(float))
 
 
 @st.composite
-def bar_rows(draw: st.DrawFn) -> list[tuple[float, float, float, float, float]]:
+def bar_rows(draw: st.DrawFn) -> BarRows:
     n = draw(st.integers(1, 160))
     rows = []
     for _ in range(n):
@@ -46,13 +48,13 @@ SUITE = [
 ]
 
 
-def finite(values: np.ndarray) -> np.ndarray:
-    return values[~np.isnan(values)]
+def finite(values: F64) -> F64:
+    return np.asarray(values[~np.isnan(values)], dtype=np.float64)
 
 
 @FAST
 @given(rows=bar_rows(), per_session=st.integers(1, 80))
-def test_oscillators_stay_in_range_and_nothing_blows_up(rows: list, per_session: int) -> None:
+def test_oscillators_stay_in_range_and_nothing_blows_up(rows: BarRows, per_session: int) -> None:
     bars = from_ohlcv(rows, per_session=per_session)
     rsi = finite(indicators.get("rsi").batch(bars)["rsi_14"])
     adx = indicators.get("adx").batch(bars)
@@ -69,7 +71,7 @@ def test_oscillators_stay_in_range_and_nothing_blows_up(rows: list, per_session:
 
 @FAST
 @given(rows=bar_rows(), per_session=st.integers(1, 80))
-def test_vwap_lies_between_the_session_low_and_high(rows: list, per_session: int) -> None:
+def test_vwap_lies_between_the_session_low_and_high(rows: BarRows, per_session: int) -> None:
     bars = from_ohlcv(rows, per_session=per_session)
     vwap = indicators.get("vwap").batch(bars)["vwap"]
     for i in range(len(bars)):
@@ -84,7 +86,7 @@ def test_vwap_lies_between_the_session_low_and_high(rows: list, per_session: int
 @FAST
 @given(rows=bar_rows(), per_session=st.integers(1, 80), data=st.data())
 def test_no_look_ahead_changing_a_later_bar_never_changes_an_earlier_value(
-    rows: list, per_session: int, data: st.DataObject
+    rows: BarRows, per_session: int, data: st.DataObject
 ) -> None:
     if len(rows) < 2:
         return
@@ -101,7 +103,7 @@ def test_no_look_ahead_changing_a_later_bar_never_changes_an_earlier_value(
 
 @FAST
 @given(rows=bar_rows(), per_session=st.integers(1, 80))
-def test_batch_equals_streaming_on_random_bars(rows: list, per_session: int) -> None:
+def test_batch_equals_streaming_on_random_bars(rows: BarRows, per_session: int) -> None:
     bars: Bars = from_ohlcv(rows, per_session=per_session)
     for ind in SUITE:
         batch, stream = ind.batch(bars), ind.stream()

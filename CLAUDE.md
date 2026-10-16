@@ -21,8 +21,15 @@ same change as the code.
 ## Check before pushing
 
 ```sh
-uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest
+make check
 ```
+
+`make check` runs, in order (each is also its own target): `ruff check` (pycodestyle, pyflakes, isort, pyupgrade, bugbear,
+simplify, comprehensions, pydocstyle for module/class/function/package docstrings, security, McCabe complexity 10) ·
+`ruff format --check` · `mypy --strict` on `src` and `tests` · `bandit` on `src` · `pip-audit` on the locked dependencies
+(through `uv export`; the one ignored advisory has its reason in the Makefile) · `pytest` with an 80 percent coverage floor.
+`make hooks` installs a pre-commit hook (ruff, ruff format, mypy). Config lives in `pyproject.toml`; do not silence a
+rule inline without a reason next to it.
 
 ## Layout
 

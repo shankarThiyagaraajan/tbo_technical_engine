@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 import httpx
 import pytest
@@ -30,7 +31,7 @@ async def test_not_published_yet_is_none() -> None:
 
 
 async def test_an_empty_page_is_none() -> None:
-    body = {"items": [], "next_cursor": None}
+    body: dict[str, Any] = {"items": [], "next_cursor": None}
     assert await fundamental_client(lambda r: httpx.Response(200, json=body)).universe() is None
 
 

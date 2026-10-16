@@ -126,7 +126,7 @@ class _LevelsStream:
         self.spec = spec
         self.session = -1
         self.cur_h = self.cur_l = self.cur_c = NAN
-        self.levels: dict[str, float] = {name: NAN for name in spec.names}
+        self.levels: dict[str, float] = dict.fromkeys(spec.names, NAN)
 
     def update(self, bar: Bar) -> dict[str, float]:
         if bar.session != self.session:
@@ -234,4 +234,4 @@ class _OrStream:
                 self.done = True
         if self.valid and self.done:
             return s._values(self.hi, self.lo)
-        return {name: NAN for name in s.outputs}
+        return dict.fromkeys(s.outputs, NAN)

@@ -9,7 +9,7 @@ NOW = datetime(2026, 10, 15, 4, 0, tzinfo=UTC)
 
 
 def status(state: str) -> FeedStatus:
-    return FeedStatus(state=state, changed_at=NOW)  # type: ignore[arg-type]
+    return FeedStatus(state=state, changed_at=NOW)
 
 
 def test_starts_inactive_and_degraded() -> None:

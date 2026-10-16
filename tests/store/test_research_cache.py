@@ -3,13 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.store.research_cache import ResearchCache
 from tests.support import ISIN_A, candle
 
 T0 = datetime(2026, 10, 15, 3, 45, tzinfo=UTC)
 
 
-def rows(n: int, close: str = "100.00") -> list:
+def rows(n: int, close: str = "100.00") -> list[Candle]:
     return [candle(ISIN_A, "5m", T0 + timedelta(minutes=5 * i), close) for i in range(n)]
 
 

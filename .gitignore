@@ -18,3 +18,7 @@ build/
 *.pem
 # Strict rule: an editor's local history is never committed (CI fails on a tracked .history/).
 .history/
+
+.audit-requirements.txt
+.coverage
+dump.rdb

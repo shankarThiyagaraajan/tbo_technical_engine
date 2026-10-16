@@ -77,3 +77,8 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   awaited under strict mypy), JSON event/response dicts, and the Celery/FastAPI state objects.
 - Dataclasses (`WarmupSpec`, `Bars`, `Context`, `IndexSeries`, ...) stay beside the logic that owns them; only pydantic
   models live in `schemas/`.
+- Checks (2026-10-16): `make check` = ruff (lint, McCabe 10, docstrings), ruff format, mypy --strict on src and tests,
+  bandit, pip-audit, pytest with an 80 percent coverage floor (94.7 percent at the time); `.pre-commit-config.yaml` runs
+  ruff, ruff format and mypy. Found and fixed: 45 mypy errors in tests (generics, unused ignores, loose dict types), 9
+  packages without a docstring, three comprehension nits. pip-audit: pytest 8.4.2 (PYSEC-2026-1845, dev-only) ignored
+  with a reason because the fix needs pytest 9 and pytest-asyncio 1.x. Bandit: B101 skipped (as ruff S101), B104 marked.

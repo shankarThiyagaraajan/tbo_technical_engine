@@ -85,7 +85,7 @@ class _VwapStream:
         self.cum_v += bar.volume
         self.cum_pv += bar.volume * tp
         self.cum_pv2 += bar.volume * tp * tp
-        out = {name: NAN for name in self.spec.outputs}
+        out = dict.fromkeys(self.spec.outputs, NAN)
         if self.cum_v > 0:
             vwap = self.cum_pv / self.cum_v
             sigma = math.sqrt(max(self.cum_pv2 / self.cum_v - vwap * vwap, 0.0))

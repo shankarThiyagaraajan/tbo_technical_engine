@@ -20,7 +20,7 @@ def worker(redis: Any, sessions: Any, universe_status: int = 200) -> SignalWorke
         item = {"trade_date": "2026-10-15", "isin": ISIN_A, "universe_version": 3}
         return httpx.Response(200, json={"items": [item], "next_cursor": None})
 
-    settings = Settings(redis_url="redis://unused", research_cache_dir="/nonexistent")  # type: ignore[arg-type]
+    settings = Settings(redis_url="redis://unused", research_cache_dir="/nonexistent")
     return SignalWorker(settings, redis, sessions, FakeFeed().client(), fundamental_client(handle), calendar=CALENDAR)
 
 

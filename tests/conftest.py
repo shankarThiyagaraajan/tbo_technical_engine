@@ -79,7 +79,7 @@ def settings(database_url: str, redis_url: str, monkeypatch: pytest.MonkeyPatch)
 
 @pytest.fixture
 async def redis(redis_url: str) -> AsyncIterator[Any]:
-    client = aioredis.from_url(redis_url)
+    client = aioredis.Redis.from_url(redis_url)
     await client.flushdb()
     yield client
     await client.aclose()
@@ -100,7 +100,7 @@ async def client(app: Any) -> AsyncIterator[httpx.AsyncClient]:
 
 
 @pytest.fixture
-async def sessions(app: Any) -> AsyncIterator[Any]:
+async def sessions(app: Any) -> Any:
     """The app's session factory, with this component's tables emptied."""
     factory = app.state.sessions
     async with factory() as session, session.begin():

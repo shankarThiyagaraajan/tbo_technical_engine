@@ -39,7 +39,7 @@ CATALOGUE: dict[str, Callable[..., Indicator]] = {
 }
 
 
-def get(name: str, **params: float) -> Indicator:
+def get(name: str, **params: float | tuple[float, ...]) -> Indicator:
     """The indicator called `name` with `params`; ValueError for an unknown name or an unusable parameter."""
     try:
         factory = CATALOGUE[name]
