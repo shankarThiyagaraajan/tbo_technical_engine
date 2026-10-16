@@ -14,6 +14,7 @@ import math
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from math import isfinite
 from typing import ClassVar, Literal
 
 from tbo_technical_engine.indicators.format import decimal_text
@@ -64,8 +65,12 @@ class Context:
 
 
 def finite(*values: float) -> bool:
-    """True when every value is a real number (nan means an indicator is still warming up)."""
-    return all(math.isfinite(x) for x in values)
+    """True when every value is a real number (nan means an indicator is still warming up). A plain loop: this runs
+    about a million times in a one-year backtest, and `all()` over a generator was a measurable part of it."""
+    for x in values:  # noqa: SIM110  (kept as a loop on purpose: see the docstring)
+        if not isfinite(x):
+            return False
+    return True
 
 
 def component(name: str, is_met: bool, value: float | None = None) -> Component:

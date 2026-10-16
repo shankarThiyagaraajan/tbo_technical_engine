@@ -5,6 +5,7 @@ One `tick` is one decision; the signal worker calls it every few seconds. Nothin
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from datetime import date, datetime, time
 
@@ -38,6 +39,7 @@ class WarmupSupervisor:
         calendar: TradingCalendar,
         clock: Callable[[], datetime],
         cache: ResearchCache | None = None,
+        prime: Callable[[str], None] | None = None,
     ) -> None:
         self.client = client
         self.buffer = buffer
@@ -47,6 +49,8 @@ class WarmupSupervisor:
         self.calendar = calendar
         self.clock = clock
         self.cache = cache
+        self.prime = prime
+        """Called for each stock after a warm-up, to build its indicator state before the first candle needs it."""
         self._session_day: date | None = None
 
     async def tick(self) -> None:
@@ -75,5 +79,16 @@ class WarmupSupervisor:
             return
         generation = self.readiness.generation
         await warm_up(self.client, self.buffer, targets, now, self.calendar, self.spec, cache=self.cache)
+        await self._prime(targets)
         if self.readiness.needs_warmup and not self.readiness.mark_warm(generation):
             log.warning("warmup_discarded_feed_went_unhealthy")
+
+    async def _prime(self, isins: list[str]) -> None:
+        """Build each warmed stock's indicator state, one stock at a time with a yield between, so the event loop (the
+        candle consumers) keeps running while a few hundred stocks are primed."""
+        if self.prime is None:
+            return
+        for isin in isins:
+            if is_warm(self.buffer, isin, self.spec):
+                self.prime(isin)
+            await asyncio.sleep(0)

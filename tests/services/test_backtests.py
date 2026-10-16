@@ -9,8 +9,8 @@ from typing import Any
 import pytest
 from sqlalchemy import func, select, update
 
-from tbo_technical_engine.backtest import study as study_module
-from tbo_technical_engine.backtest.engine import run_strategy
+from tbo_technical_engine.backtest import engine as engine_module
+from tbo_technical_engine.backtest.replay import build_tape
 from tbo_technical_engine.services import backtests as service
 from tbo_technical_engine.store import backtests as store
 from tbo_technical_engine.store.tables import backtest, backtest_trade
@@ -193,16 +193,16 @@ async def test_the_other_parameter_sets_are_skipped_when_they_would_not_fit_and_
         clock["now"] += 0.001
         return clock["now"]
 
-    # The base run "takes" 1,000 s of a 3,300 s budget, so 5 more parameter sets (6 in all) cannot fit.
+    # The first (and only) stock "takes" 3,000 s of a 3,300 s budget with all six parameter sets: the grid cannot fit.
     run = runner(sessions, filled_cache(tmp_path), monotonic=monotonic)
-    original = run_strategy
+    original = build_tape
 
     def slow(*args: Any, **kwargs: Any) -> Any:
         out = original(*args, **kwargs)
-        clock["now"] += 1000
+        clock["now"] += 3000
         return out
 
-    monkeypatch.setattr(study_module, "run_strategy", slow)
+    monkeypatch.setattr(engine_module, "build_tape", slow)
     assert await run.execute(backtest_id) == "succeeded"
     result = (await row(sessions, backtest_id)).result
     assert result["grid"] == {} and "would not fit" in result["grid_skipped"]

@@ -9,7 +9,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
-from tbo_technical_engine.backtest.engine import DayRules, coverage, run_strategy
+from tbo_technical_engine.backtest.engine import DayRules, coverage, run_grid
 from tbo_technical_engine.backtest.metrics import summarize
 from tbo_technical_engine.backtest.overrides import for_backtest
 from tbo_technical_engine.backtest.stats import equity_stats
@@ -61,8 +61,8 @@ def run_study(
     monotonic: Callable[[], float],
     deadline: float,
 ) -> Study:
-    """Parameter sets beyond the file's own run only when the file's own run left time for them: the first run's
-    duration times the number of other sets must fit before `deadline`, else the walk-forward uses the fixed parameters
+    """Parameter sets beyond the file's own only when they fit in the time left: after the first stock, the time it took
+    for all sets times the number of stocks must fit before `deadline`, else the walk-forward uses the fixed parameters
     and the result says why."""
     config = for_backtest(file, strategy, overrides, params_version)
     cover, sessions = coverage(sessions_by_isin, len(isins), start, end, gate_applied=rules is not None)
@@ -70,34 +70,26 @@ def run_study(
     grid = settings.grids.get(strategy, {}) if not overrides else {}
     base_combo: Combo = tuple((n, str(base_params[n])) for n in sorted(grid))
     all_combos = combos(grid, {n: str(base_params[n]) for n in grid})
-    runs: dict[Combo, list[Trade]] = {}
-    counts: dict[str, int] = {}
-    skipped: str | None = None
-    base_seconds = 0.0
-    for combo in sorted(all_combos, key=lambda c: c != base_combo):  # the file's own parameters first
-        if combo != base_combo and base_seconds * (len(all_combos) - 1) > deadline - monotonic():
-            skipped = (
-                f"{len(all_combos)} parameter sets would not fit in the time budget "
-                f"(one takes {base_seconds:.0f} s): walk-forward ran on the fixed parameters"
-            )
-            runs = {base_combo: runs[base_combo]}
-            break
-        began = monotonic()
-        this = (
+    configs = {
+        combo: (
             config
             if combo == base_combo
             else for_backtest(file, strategy, [ParamOverride(name=n, value=v) for n, v in combo], params_version)
         )
-        out = run_strategy(this, strategy, isins, load, start, end, settings.execution, costs, rules, tick)
-        runs[combo] = out.trades
-        if combo == base_combo:
-            base_seconds = monotonic() - began
-            counts = {
-                "candidates": out.candidates,
-                "gated_out": out.gated_out,
-                "never_filled_or_invalid": out.unfilled_or_invalid,
-                "skipped_position_open": out.skipped_busy,
-            }
+        for combo in sorted(all_combos, key=lambda c: c != base_combo)  # the file's own parameters first
+    }
+    outcomes, skipped = run_grid(
+        configs, strategy, isins, load, start, end, settings.execution, costs, rules, tick,
+        monotonic=monotonic, deadline=deadline,
+    )  # fmt: skip
+    runs: dict[Combo, list[Trade]] = {combo: out.trades for combo, out in outcomes.items()}
+    base_out = outcomes[base_combo]
+    counts = {
+        "candidates": base_out.candidates,
+        "gated_out": base_out.gated_out,
+        "never_filled_or_invalid": base_out.unfilled_or_invalid,
+        "skipped_position_open": base_out.skipped_busy,
+    }
     trades = runs[base_combo]
     return Study(
         trades=trades,

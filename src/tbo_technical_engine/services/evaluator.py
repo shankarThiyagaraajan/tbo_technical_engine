@@ -9,8 +9,8 @@ write cannot swallow a signal.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from datetime import datetime, timedelta
+from collections.abc import Callable, Mapping
+from datetime import datetime, time, timedelta
 
 from tbo_platform_kit.calendar import IST
 from tbo_platform_kit.logging import get_logger
@@ -43,12 +43,16 @@ class StrategyEvaluator:
         config: StrategyFile,
         registry: dict[str, Strategy] | None = None,
         index_side: IndexSide | None = None,
+        contexts: Mapping[datetime, Context | None] | None = None,
     ) -> None:
         self.engine = engine
         self.buffer = buffer
         self.config = config
         self.registry = registry or REGISTRY
         self.index_side = index_side
+        self.contexts = contexts
+        """Contexts built beforehand, by candle start (a backtest's tape: the same candles under many parameter sets
+        build each context once). When set, `evaluate` reads them instead of building one from the buffer."""
         self.fired: dict[FiredKey, datetime] = {}
         """When (the entry candle's close) each strategy last produced a candidate for a stock and side."""
 
@@ -66,12 +70,20 @@ class StrategyEvaluator:
         recent = self.engine.recent(candle.isin, "5m")
         if not recent or recent[-1][0].start_at != candle.start_at:
             return None  # a newer candle has arrived since: this one is history, not an entry
-        local_day = candle.start_at.astimezone(IST).date()
-        series = self.buffer.series(candle.isin, "5m")
-        session = [
-            c for c in series if c.start_at <= candle.start_at and c.start_at.astimezone(IST).date() == local_day
-        ]
-        earlier = [c for c in series if c.start_at.astimezone(IST).date() < local_day]
+        day_start = datetime.combine(candle.start_at.astimezone(IST).date(), time(0, 0), tzinfo=IST)
+        # Walk back from the newest candle: today's candles first, then the previous session's last close, and stop.
+        # (The buffer's newest 5-minute candle is this one, checked above.) A candle belongs to today when it starts at
+        # or after IST midnight, so no time-zone conversion is needed per candle; scanning the whole 1,000-candle series
+        # with one for each was most of the cost of a replay.
+        today: list[Candle] = []
+        prev_close: float | None = None
+        for c in reversed(self.buffer.view(candle.isin, "5m")):
+            if c.start_at >= day_start:
+                today.append(c)
+            else:
+                prev_close = float(c.close)
+                break
+        today.reverse()
         trend = self.engine.values_asof(candle.isin, "15m", candle.start_at)
         daily = self.engine.values(candle.isin, "1d")
         return Context(
@@ -79,8 +91,8 @@ class StrategyEvaluator:
             rows=[Row(c, v) for c, v in recent],
             trend15=None if trend is None else trend[1],
             daily=None if daily is None else daily[1],
-            session=session,
-            prev_close=float(earlier[-1].close) if earlier else None,
+            session=today,
+            prev_close=prev_close,
             index_side=None if self.index_side is None else self.index_side(candle.start_at),
         )
 
@@ -106,7 +118,7 @@ class StrategyEvaluator:
                 if not sides:
                     continue
                 if ctx is None:
-                    ctx = self.context(candle)
+                    ctx = self.contexts.get(candle.start_at) if self.contexts is not None else self.context(candle)
                     if ctx is None:
                         return []
                 for draft in strategy.on_candle(ctx, params, sides):
