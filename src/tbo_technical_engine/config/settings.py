@@ -38,3 +38,7 @@ class Settings(ComponentSettings, short_name=SHORT_NAME, repository=REPOSITORY):
     """Wider than this: `wide` (range day likely). Starting values, to be tuned by the backtest."""
     swing_file: Path = Path("config/swing.yaml")
     """The swing analysis parameters (`config/swing.yaml`); read by the daily snapshot job, and a bad file stops it."""
+    backtest_file: Path = Path("config/backtest.yaml")
+    """Caps, execution assumptions, walk-forward windows and parameter grids for backtests (TE5)."""
+    costs_file: Path = Path("config/costs.yaml")
+    """The trading-cost schedule for backtests. Placeholder figures until the owner confirms them (TE5)."""

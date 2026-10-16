@@ -111,6 +111,9 @@ async def sessions(app: Any) -> Any:
             "technical_snapshot",
             "swing_setup",
             "outbox",
+            "backtest",
+            "backtest_trade",
+            "strategy_evidence",
         )
         await session.execute(text("TRUNCATE " + ", ".join(f"{SHORT_NAME}.{t}" for t in tables)))
     return factory
