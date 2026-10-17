@@ -6,7 +6,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.schemas.signal import SignalCandidate
 from tbo_technical_engine.schemas.strategy import StrategyFile

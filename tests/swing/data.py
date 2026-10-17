@@ -65,7 +65,7 @@ def wave(n: int, start: float, step: float, amplitude: float = 0.6, period: floa
 
 def candles_from(isin: str, bars: Bars, *, volume_scale: float = 1.0) -> list[Candle]:
     """Daily candles (start at IST midnight, as the feed's daily candles do) from bars."""
-    from tbo_platform_kit.calendar import IST
+    from tbo_platform_kit.config.calendar import IST
 
     out = []
     for i in range(len(bars)):

@@ -15,7 +15,7 @@ from decimal import Decimal
 
 import pandas as pd
 import vectorbt as vbt  # noqa: F401  (importing registers the `.vbt` accessor on pandas objects)
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.schemas.backtest import Trade
 

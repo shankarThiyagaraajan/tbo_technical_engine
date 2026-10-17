@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 import polars as pl
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.backtest.replay import replay_stock
 from tbo_technical_engine.config import synthetic as cfg

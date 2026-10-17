@@ -14,7 +14,8 @@ from datetime import date, datetime, time, timedelta
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from tbo_platform_kit.calendar import IST, TradingCalendar
+from tbo_platform_kit.calendar import TradingCalendar
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.logging import get_logger
 from tbo_signals import Signals

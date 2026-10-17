@@ -15,13 +15,15 @@ import asyncio
 import sys
 from datetime import date
 
-from tbo_platform_kit.calendar import IST, TradingCalendar, now_utc
+from tbo_platform_kit.calendar import TradingCalendar, now_utc
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.db import create_engine, session_factory
 
 from tbo_technical_engine.config import latency as cfg
 from tbo_technical_engine.config.settings import Settings
 from tbo_technical_engine.schemas.latency import SessionReport
 from tbo_technical_engine.services import session_report
+from tbo_technical_engine.services.market_calendar import build_calendar
 from tbo_technical_engine.store import latency as store
 
 
@@ -61,7 +63,9 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings()
     settings.require("database_url")
     end = args.date or now_utc().astimezone(IST).date()
-    days = trading_days_ending(TradingCalendar.load(), end, args.days)
+    calendar = build_calendar(settings)
+    asyncio.run(calendar.refresh())
+    days = trading_days_ending(calendar, end, args.days)
     reports = asyncio.run(build(settings, days))
     sys.stdout.write(session_report.render(reports))
     return 0 if session_report.consecutive_clean(reports) >= cfg.CLEAN_SESSIONS_REQUIRED else 1

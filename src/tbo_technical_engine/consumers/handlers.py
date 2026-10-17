@@ -17,6 +17,7 @@ from tbo_signals import Signals
 from tbo_technical_engine.schemas.candle import FeedStatus, UniverseSnapshot
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
 from tbo_technical_engine.services.ingest import CandleIngest
+from tbo_technical_engine.services.market_calendar import LiveCalendar
 from tbo_technical_engine.services.readiness import Readiness
 from tbo_technical_engine.services.universe import UniverseHolder
 
@@ -24,6 +25,7 @@ log = get_logger(__name__)
 CANDLE_STREAM = "tbo.market_feed.candle"
 FEED_STREAM = "tbo.market_feed.feed"
 UNIVERSE_STREAM = "tbo.fundamental.universe"
+CALENDAR_STREAM = "tbo.filings.market_calendar"
 
 
 class RecreatingConsumer(EventConsumer):
@@ -122,4 +124,25 @@ def universe_consumer(
         consumer=name,
         handler=handle,
         metrics=metrics,
+    )
+
+
+def calendar_consumer(
+    redis: Redis, profile: ModeProfile, calendar: LiveCalendar, name: str, metrics: Metrics | None = None
+) -> EventConsumer:
+    """Reads `market_calendar.updated` events and rebuilds the calendar at once. The hourly refresh is the backstop, so
+    a group created now starts at the end of the stream (the 3 days of history add nothing the first refresh lacks)."""
+
+    async def handle(event: dict[str, Any], session: AsyncSession | None) -> None:
+        await calendar.refresh()
+
+    return RecreatingConsumer(
+        redis,
+        profile,
+        stream=CALENDAR_STREAM,
+        group="technical.calendar",
+        consumer=name,
+        handler=handle,
+        metrics=metrics,
+        start_id="$",
     )

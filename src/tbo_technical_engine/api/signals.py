@@ -9,7 +9,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
 from tbo_contracts.models.common import Timeframe
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.http_server import requires
 from tbo_platform_kit.problems import Problem
 from tbo_platform_kit.tokens import Claims

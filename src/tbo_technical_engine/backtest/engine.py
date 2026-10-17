@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal
 
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.backtest.replay import Tape, build_tape, entry_windows, replay_tape
 from tbo_technical_engine.backtest.simulate import simulate

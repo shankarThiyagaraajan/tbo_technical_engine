@@ -17,7 +17,8 @@ from datetime import date, timedelta
 
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from tbo_platform_kit.calendar import IST, TradingCalendar, now_utc
+from tbo_platform_kit.calendar import TradingCalendar, now_utc
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.db import create_engine, session_factory
 from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.http_client import IssuerTokenProvider, ServiceClient, UpstreamUnavailable
@@ -28,7 +29,7 @@ from tbo_signals import Signals
 from tbo_technical_engine import outbox
 from tbo_technical_engine.clients import fundamental, market_feed
 from tbo_technical_engine.config.settings import REPOSITORY, Settings
-from tbo_technical_engine.consumers.handlers import candle_consumer, feed_consumer, universe_consumer
+from tbo_technical_engine.consumers.handlers import calendar_consumer, candle_consumer, feed_consumer, universe_consumer
 from tbo_technical_engine.context.index_source import IndexSource
 from tbo_technical_engine.schemas.latency import BoundaryLatency
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
@@ -38,6 +39,7 @@ from tbo_technical_engine.services.evaluator import StrategyEvaluator
 from tbo_technical_engine.services.indicator_engine import IndicatorEngine
 from tbo_technical_engine.services.ingest import CandleIngest
 from tbo_technical_engine.services.latency import LatencyRecorder, LatencyTracker
+from tbo_technical_engine.services.market_calendar import LiveCalendar, build_calendar
 from tbo_technical_engine.services.platform_signals import (
     build_signals,
     report_boundaries,
@@ -82,6 +84,7 @@ class SignalWorker:
         self.universe = UniverseHolder()
         self.spec = WarmupSpec()
         calendar = calendar or TradingCalendar.load()
+        self.live = calendar if isinstance(calendar, LiveCalendar) else None
         self.ingest = CandleIngest(
             self.buffer,
             self.readiness,
@@ -134,6 +137,8 @@ class SignalWorker:
             feed_consumer(redis, profile, self.readiness, name, metrics, signals),
             universe_consumer(redis, profile, self.universe, self.buffer, name, metrics, signals),
         ]
+        if self.live is not None and self.live.configured:
+            self.consumers.append(calendar_consumer(redis, profile, self.live, name, metrics))
 
     async def ensure_universe(self, today: date) -> None:
         """Read the universe over REST when the stream has not given us today's (a restart after 08:20)."""
@@ -187,6 +192,8 @@ class SignalWorker:
             asyncio.create_task(self.supervise(stop)),
             asyncio.create_task(self.recorder.run(stop)),
         ]
+        if self.live is not None:
+            tasks.append(asyncio.create_task(self.live.run(stop)))
         await stop.wait()
         for task in tasks:
             await task
@@ -212,6 +219,7 @@ async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
     metrics = Metrics(settings.short_name, settings.version, settings.profile.mode.value)
     signals = build_signals(settings, metrics.registry)
     serve_metrics(settings, signals)
+    calendar = build_calendar(settings, tokens, signals)
     try:
         worker = SignalWorker(
             settings,
@@ -220,11 +228,14 @@ async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
             market_feed.MarketFeedClient(feed_http),
             fundamental.FundamentalClient(fund_http),
             metrics,
+            calendar=calendar,
             signals=signals,
         )
         await worker.run(stop)
     finally:
         signals.close()
+        if calendar.client is not None:
+            calendar.client.close()
         await feed_http.aclose()
         await fund_http.aclose()
         await redis.aclose()

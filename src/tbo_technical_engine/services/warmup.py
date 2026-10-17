@@ -11,7 +11,8 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 
-from tbo_platform_kit.calendar import IST, TradingCalendar
+from tbo_platform_kit.calendar import TradingCalendar
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.http_client import UpstreamUnavailable
 from tbo_platform_kit.logging import get_logger
 
