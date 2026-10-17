@@ -26,6 +26,11 @@ class Settings(ComponentSettings, short_name=SHORT_NAME, repository=REPOSITORY):
     """The market feed (candle history, feed status); needed by the signal worker."""
     fundamental_url: AnyHttpUrl | None = None
     """The fundamental engine (the universe); needed by the signal worker."""
+    filings_url: AnyHttpUrl | None = None
+    """The filings extractor (`GET /v1/market-calendar`: holidays, special sessions, timing changes). Unset: the trading
+    calendar stays empty, every day-dependent job reports "calendar unknown" and the worker logs one warning."""
+    calendar_cache_file: Path = Path(".dev/calendar.json")
+    """The last-good copy of the calendar (mode 0600, written atomically by the kit); used when the API is down."""
     research_cache_dir: Path = Path(".dev/research_cache")
     """Parquet cache of candles for research and backtests (`store/research_cache.py`). Not committed (`.dev/`)."""
     max_candle_age_seconds: int = 120

@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from datetime import datetime, time, timedelta
 
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.logging import get_logger
 
 from tbo_technical_engine.indicators.format import decimals

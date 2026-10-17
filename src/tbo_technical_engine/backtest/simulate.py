@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import time
 from decimal import ROUND_HALF_EVEN, Decimal
 
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.backtest.costs import leg_charges
 from tbo_technical_engine.schemas.backtest import Execution, ExitReason, Side, Trade

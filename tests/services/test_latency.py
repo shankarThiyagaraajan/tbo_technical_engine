@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.config import latency as cfg
 from tbo_technical_engine.schemas.latency import BoundaryLatency

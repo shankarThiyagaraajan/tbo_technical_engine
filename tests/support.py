@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from tbo_platform_kit.calendar import IST, TradingCalendar
+from tbo_platform_kit.calendar import TradingCalendar
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.http_client import ServiceClient, StaticTokenProvider
 from tbo_signals import Signals, load_manifest
 from tbo_signals.config.constants import Level

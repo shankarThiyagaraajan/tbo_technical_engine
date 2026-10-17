@@ -14,7 +14,7 @@ from decimal import Decimal
 
 import numpy as np
 from numpy.typing import NDArray
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.config import synthetic as cfg
 from tbo_technical_engine.schemas.candle import Candle, Timeframe

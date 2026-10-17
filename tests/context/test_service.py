@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import func, select, text
 from tbo_contracts import validate
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.context.index_source import IndexSeries, IndexSnapshot, VixReading
 from tbo_technical_engine.schemas.candle import UniverseSnapshot

@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine import indicators
 from tbo_technical_engine.context.index_source import IndexSeries, VixReading

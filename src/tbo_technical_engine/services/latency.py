@@ -19,7 +19,8 @@ from datetime import UTC, date, datetime, timedelta
 from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from tbo_platform_kit.calendar import IST, TradingCalendar
+from tbo_platform_kit.calendar import TradingCalendar
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.logging import get_logger
 
 from tbo_technical_engine.config import latency as cfg

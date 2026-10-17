@@ -51,8 +51,14 @@ signals:
     unit: seconds
     description: When each part of the signal worker last handled something, or last failed.
     labels:
-      worker: {enum: [candles, feed, universe, supervisor]}
-    upstream: [market_feed, fundamental]
+      worker: {enum: [candles, feed, universe, supervisor, calendar]}
+    upstream: [market_feed, fundamental, filings]
+
+  - id: technical.calendar_age
+    kind: gauge
+    unit: seconds
+    description: Seconds since the trading calendar was last fetched from the filings extractor (an old value means the API is down and the cache is in use).
+    upstream: [filings]
 
   - id: technical.swing_snapshot
     kind: activity

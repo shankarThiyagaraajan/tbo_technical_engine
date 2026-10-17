@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
 from tbo_technical_engine.services.warmup import WarmupSpec, is_warm, warm_up, window_start

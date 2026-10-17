@@ -16,7 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import polars as pl
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.schemas.backtest import StockData
 from tbo_technical_engine.schemas.candle import Candle

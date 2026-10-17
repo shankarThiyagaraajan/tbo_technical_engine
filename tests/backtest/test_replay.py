@@ -45,7 +45,7 @@ def test_candles_before_the_start_only_warm_the_indicators_up() -> None:
 
 
 def day_of_candidate(c: SignalCandidate) -> Any:
-    from tbo_platform_kit.calendar import IST
+    from tbo_platform_kit.config.calendar import IST
 
     return c.candle_start_at.astimezone(IST).date()
 

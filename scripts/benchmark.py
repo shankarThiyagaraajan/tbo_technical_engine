@@ -36,7 +36,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-from tbo_platform_kit.calendar import IST, TradingCalendar
+from tbo_platform_kit.calendar import TradingCalendar
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.backtest.costs import load_costs
 from tbo_technical_engine.backtest.replay import replay_stock

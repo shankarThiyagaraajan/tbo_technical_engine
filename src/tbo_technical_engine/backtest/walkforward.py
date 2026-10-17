@@ -17,7 +17,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date
 from decimal import Decimal
 
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.backtest.metrics import summarize
 from tbo_technical_engine.schemas.backtest import Fold, Metrics, Trade, WalkForward, WalkForwardSettings
