@@ -41,8 +41,8 @@ dev = [
 
 [tool.uv.sources]
 tbo-platform-kit = { git = "https://github.com/shankarThiyagaraajan/tbo_platform", rev = "bfaaabf54981055950ae03bad9ed14c384c83c9c", subdirectory = "packages/tbo_platform_kit" }
-tbo-contracts = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts", rev = "ef372dbfc0421fb9d5729a60a5ed2feb2b4fab01" }  # 1.4.0, not tagged yet (only the Release workflow tags)
-tbo-signals = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "e0967da6fbfc2f09e1f92fc497f7faf7adb22643", subdirectory = "packages/tbo_signals" }
+tbo-contracts = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts", rev = "6e2fe921d5506257cc63faee866254e75c817d76" }  # 1.7.0, not tagged yet (only the Release workflow tags)
+tbo-signals = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "061dd406b9183e647721f9755206163bd28e6111", subdirectory = "packages/tbo_signals" }
 
 
 [tool.pytest.ini_options]
@@ -91,9 +91,9 @@ module = ["tests.indicators.test_oracle", "tests.test_tasks"]
 disallow_untyped_calls = false
 
 [tool.uv]
-# The kit's own sources pin tbo_contracts v1.1.0; this service needs 1.4.0 (tbo_signals reads the signal manifest
-# contract, and 1.2.0 added not_implemented). Drop the override when the kit moves to 1.4.0 or later.
-override-dependencies = ["tbo-contracts @ git+https://github.com/shankarThiyagaraajan/tbo_contracts@ef372dbfc0421fb9d5729a60a5ed2feb2b4fab01"]
+# The kit's own sources pin tbo_contracts v1.1.0; this service needs 1.7.0 (tbo_signals reads the signal manifest
+# contract, and 1.2.0 added not_implemented). Drop the override when the kit moves to 1.7.0 or later.
+override-dependencies = ["tbo-contracts @ git+https://github.com/shankarThiyagaraajan/tbo_contracts@6e2fe921d5506257cc63faee866254e75c817d76"]
 
 [tool.coverage.run]
 source = ["src/tbo_technical_engine"]

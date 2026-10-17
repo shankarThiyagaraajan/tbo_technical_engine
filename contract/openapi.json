@@ -174,6 +174,59 @@
         }
       }
     },
+    "/v1/signal-manifest": {
+      "get": {
+        "operationId": "get_signal_manifest",
+        "summary": "The signals this service declares (the trade candidates are at /v1/signals)",
+        "description": "The signals this service declares (schemas/platform/signal_manifest.v1.json), read by the platform's signals hub. The answer is the same for every caller and holds no data, only declarations.",
+        "tags": [
+          "signals"
+        ],
+        "security": [
+          {
+            "bearerAuth": [
+              "technical:read"
+            ]
+          }
+        ],
+        "x-tbo-consumers": [
+          "tbo_platform"
+        ],
+        "x-tbo-timeout-ms": 500,
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "200": {
+            "description": "The manifest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Signalmanifest"
+                },
+                "example": {
+                  "service": "technical",
+                  "signals": [
+                    {
+                      "id": "technical.worker_activity",
+                      "kind": "activity",
+                      "unit": "seconds",
+                      "description": "The last time the worker did its work."
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/signals": {
       "get": {
         "operationId": "list_signals",
@@ -2365,6 +2418,484 @@
             "created_at": "2026-10-15T05:00:01Z"
           }
         ]
+      },
+      "Signalmanifest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Signal manifest",
+        "description": "The signals one service declares (its config/signals.yaml, served at GET /signals). A signal is a count, a gauge, a liveness mark, a held item or a plain event that carries no business data: no symbols, ISINs, prices, quantities or secrets. Every label lists the values it may take (an enum) or the pattern it must match, so the library can check each value before it emits.",
+        "type": "object",
+        "required": [
+          "service",
+          "signals"
+        ],
+        "properties": {
+          "service": {
+            "$ref": "#/components/schemas/SignalmanifestServiceName"
+          },
+          "signals": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/SignalmanifestSignal"
+            }
+          }
+        },
+        "$defs": {
+          "ServiceName": {
+            "title": "Signal service name",
+            "description": "Short name of the service that owns the signals, for example technical or news_extractor.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,30}$"
+          },
+          "Signal": {
+            "title": "Signal declaration",
+            "description": "One signal: what it is, its unit, how it links to others and when it alerts.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind",
+              "unit",
+              "description"
+            ],
+            "properties": {
+              "id": {
+                "description": "<service>.<name>, unique across the platform.",
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{1,30}\\.[a-z][a-z0-9_]{1,60}$"
+              },
+              "kind": {
+                "description": "activity: a worker or consumer is alive (epoch seconds). count: only goes up. gauge: goes up and down. held: an item waits for approval (ids and sizes, never content). event: a notable, low-volume event. security: raised by the filter. custom: a service-defined signal that fits none of these.",
+                "type": "string",
+                "enum": [
+                  "activity",
+                  "count",
+                  "gauge",
+                  "held",
+                  "event",
+                  "security",
+                  "custom"
+                ]
+              },
+              "unit": {
+                "description": "What one step of the signal measures, for example items, seconds, bytes.",
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,30}$"
+              },
+              "description": {
+                "description": "A plain sentence for the dashboard and its users.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "labels": {
+                "description": "Label name to the values it may take. Free text is not allowed; names that would carry business data or secrets are refused.",
+                "type": "object",
+                "maxProperties": 5,
+                "propertyNames": {
+                  "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                  "not": {
+                    "enum": [
+                      "symbol",
+                      "ticker",
+                      "stock",
+                      "company",
+                      "isin",
+                      "price",
+                      "quantity",
+                      "qty",
+                      "capital",
+                      "amount",
+                      "pnl",
+                      "token",
+                      "secret",
+                      "password",
+                      "api_key",
+                      "key",
+                      "email",
+                      "phone",
+                      "url",
+                      "user",
+                      "user_id",
+                      "recipient"
+                    ]
+                  }
+                },
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/SignalmanifestLabelRule"
+                }
+              },
+              "level": {
+                "description": "The lowest level at which the signal is emitted. metrics: counts and gauges only. full: also events on the stream. Default metrics.",
+                "type": "string",
+                "enum": [
+                  "metrics",
+                  "full"
+                ],
+                "default": "metrics"
+              },
+              "upstream": {
+                "description": "Signal ids or service names this signal comes from.",
+                "type": "array",
+                "maxItems": 20,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/SignalmanifestLinkRef"
+                }
+              },
+              "downstream": {
+                "description": "Signal ids or service names this signal feeds.",
+                "type": "array",
+                "maxItems": 20,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/SignalmanifestLinkRef"
+                }
+              },
+              "stage": {
+                "description": "The pipeline stage the dashboard board draws it in.",
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,30}$"
+              },
+              "alert": {
+                "$ref": "#/components/schemas/SignalmanifestSignalAlert"
+              }
+            }
+          },
+          "LabelRule": {
+            "title": "Signal label rule",
+            "description": "The values a label may take: an enum, or an anchored regular expression. Exactly one of the two.",
+            "type": "object",
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "required": [
+                  "enum"
+                ]
+              },
+              {
+                "required": [
+                  "pattern"
+                ]
+              }
+            ],
+            "properties": {
+              "enum": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 50,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9_.-]{0,39}$"
+                }
+              },
+              "pattern": {
+                "description": "Must start with ^ and end with $.",
+                "type": "string",
+                "maxLength": 200,
+                "pattern": "^\\^.*\\$$"
+              }
+            }
+          },
+          "LinkRef": {
+            "title": "Signal link",
+            "description": "A signal id (<service>.<name>) or a service name.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,30}(\\.[a-z][a-z0-9_]{1,60})?$"
+          },
+          "SignalAlert": {
+            "title": "Signal alert rule",
+            "description": "The alert generated from the manifest: stale when nothing arrived within stale_after_seconds, or out of range when the value leaves min_value or max_value. At least one of the three.",
+            "type": "object",
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "stale_after_seconds"
+                ]
+              },
+              {
+                "required": [
+                  "min_value"
+                ]
+              },
+              {
+                "required": [
+                  "max_value"
+                ]
+              }
+            ],
+            "properties": {
+              "stale_after_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 604800
+              },
+              "min_value": {
+                "type": "integer"
+              },
+              "max_value": {
+                "type": "integer"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "warning",
+                  "critical"
+                ],
+                "default": "warning"
+              }
+            }
+          }
+        },
+        "examples": [
+          {
+            "service": "filings",
+            "signals": [
+              {
+                "id": "filings.sync_activity",
+                "kind": "activity",
+                "unit": "seconds",
+                "description": "The last time the filings sync worker finished a pass.",
+                "stage": "collect",
+                "downstream": [
+                  "fundamental"
+                ],
+                "alert": {
+                  "stale_after_seconds": 7200,
+                  "severity": "warning"
+                }
+              },
+              {
+                "id": "filings.attachments_held",
+                "kind": "held",
+                "unit": "items",
+                "description": "Attachments waiting for approval because they are over the token limit.",
+                "labels": {
+                  "state": {
+                    "enum": [
+                      "held",
+                      "approved",
+                      "rejected",
+                      "expired"
+                    ]
+                  }
+                },
+                "level": "full",
+                "stage": "collect"
+              }
+            ]
+          }
+        ]
+      },
+      "SignalmanifestLabelRule": {
+        "title": "Signal label rule",
+        "description": "The values a label may take: an enum, or an anchored regular expression. Exactly one of the two.",
+        "type": "object",
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "enum"
+            ]
+          },
+          {
+            "required": [
+              "pattern"
+            ]
+          }
+        ],
+        "properties": {
+          "enum": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,39}$"
+            }
+          },
+          "pattern": {
+            "description": "Must start with ^ and end with $.",
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^\\^.*\\$$"
+          }
+        }
+      },
+      "SignalmanifestLinkRef": {
+        "title": "Signal link",
+        "description": "A signal id (<service>.<name>) or a service name.",
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{1,30}(\\.[a-z][a-z0-9_]{1,60})?$"
+      },
+      "SignalmanifestServiceName": {
+        "title": "Signal service name",
+        "description": "Short name of the service that owns the signals, for example technical or news_extractor.",
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{1,30}$"
+      },
+      "SignalmanifestSignal": {
+        "title": "Signal declaration",
+        "description": "One signal: what it is, its unit, how it links to others and when it alerts.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "unit",
+          "description"
+        ],
+        "properties": {
+          "id": {
+            "description": "<service>.<name>, unique across the platform.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,30}\\.[a-z][a-z0-9_]{1,60}$"
+          },
+          "kind": {
+            "description": "activity: a worker or consumer is alive (epoch seconds). count: only goes up. gauge: goes up and down. held: an item waits for approval (ids and sizes, never content). event: a notable, low-volume event. security: raised by the filter. custom: a service-defined signal that fits none of these.",
+            "type": "string",
+            "enum": [
+              "activity",
+              "count",
+              "gauge",
+              "held",
+              "event",
+              "security",
+              "custom"
+            ]
+          },
+          "unit": {
+            "description": "What one step of the signal measures, for example items, seconds, bytes.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,30}$"
+          },
+          "description": {
+            "description": "A plain sentence for the dashboard and its users.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "labels": {
+            "description": "Label name to the values it may take. Free text is not allowed; names that would carry business data or secrets are refused.",
+            "type": "object",
+            "maxProperties": 5,
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9_]{0,31}$",
+              "not": {
+                "enum": [
+                  "symbol",
+                  "ticker",
+                  "stock",
+                  "company",
+                  "isin",
+                  "price",
+                  "quantity",
+                  "qty",
+                  "capital",
+                  "amount",
+                  "pnl",
+                  "token",
+                  "secret",
+                  "password",
+                  "api_key",
+                  "key",
+                  "email",
+                  "phone",
+                  "url",
+                  "user",
+                  "user_id",
+                  "recipient"
+                ]
+              }
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SignalmanifestLabelRule"
+            }
+          },
+          "level": {
+            "description": "The lowest level at which the signal is emitted. metrics: counts and gauges only. full: also events on the stream. Default metrics.",
+            "type": "string",
+            "enum": [
+              "metrics",
+              "full"
+            ],
+            "default": "metrics"
+          },
+          "upstream": {
+            "description": "Signal ids or service names this signal comes from.",
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/SignalmanifestLinkRef"
+            }
+          },
+          "downstream": {
+            "description": "Signal ids or service names this signal feeds.",
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/SignalmanifestLinkRef"
+            }
+          },
+          "stage": {
+            "description": "The pipeline stage the dashboard board draws it in.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,30}$"
+          },
+          "alert": {
+            "$ref": "#/components/schemas/SignalmanifestSignalAlert"
+          }
+        }
+      },
+      "SignalmanifestSignalAlert": {
+        "title": "Signal alert rule",
+        "description": "The alert generated from the manifest: stale when nothing arrived within stale_after_seconds, or out of range when the value leaves min_value or max_value. At least one of the three.",
+        "type": "object",
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "stale_after_seconds"
+            ]
+          },
+          {
+            "required": [
+              "min_value"
+            ]
+          },
+          {
+            "required": [
+              "max_value"
+            ]
+          }
+        ],
+        "properties": {
+          "stale_after_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 604800
+          },
+          "min_value": {
+            "type": "integer"
+          },
+          "max_value": {
+            "type": "integer"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "warning",
+              "critical"
+            ],
+            "default": "warning"
+          }
+        }
       },
       "SnapshotPage": {
         "allOf": [

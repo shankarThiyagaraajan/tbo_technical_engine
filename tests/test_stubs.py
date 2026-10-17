@@ -17,6 +17,7 @@ DOC = json.loads((ROOT / "contract" / "openapi.json").read_text())
 IMPLEMENTED: tuple[str, ...] = (
     "/v1/indicators",
     "/v1/signals",
+    "/v1/signal-manifest",
     "/v1/strategies",
     "/v1/context",
     "/v1/snapshots",
