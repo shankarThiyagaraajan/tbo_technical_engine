@@ -10,6 +10,7 @@ from datetime import date, timedelta
 
 import redis.asyncio as aioredis
 from celery import Task
+from tbo_costs import default_book, load_book
 from tbo_platform_kit.calendar import now_utc
 from tbo_platform_kit.celery_app import create_celery, crontab_ist, every, queue_name, research_task
 from tbo_platform_kit.db import create_engine, session_factory
@@ -17,7 +18,6 @@ from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.http_client import IssuerTokenProvider, ServiceClient
 
 from tbo_technical_engine import outbox
-from tbo_technical_engine.backtest.costs import load_costs
 from tbo_technical_engine.backtest.engine import DayRules
 from tbo_technical_engine.clients import fundamental
 from tbo_technical_engine.config.settings import REPOSITORY, SHORT_NAME, Settings
@@ -109,7 +109,7 @@ async def _run_backtest(backtest_id: str) -> str:
             session_factory(engine),
             load_strategies(settings.strategies_file),
             BACKTEST_SETTINGS,
-            load_costs(settings.costs_file),
+            load_book(settings.costs_file) if settings.costs_file else default_book(),
             ResearchCache(settings.research_cache_dir),
             rules,
         )

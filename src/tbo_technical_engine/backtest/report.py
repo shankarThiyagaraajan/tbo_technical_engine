@@ -5,10 +5,22 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from tbo_costs import ScheduleBook
+
 from tbo_technical_engine.backtest.evidence import metric_dict
 from tbo_technical_engine.backtest.study import Study
 from tbo_technical_engine.schemas.backtest import BacktestSettings, Coverage, Fold, Metrics, WalkForward
-from tbo_technical_engine.schemas.costs import CostSchedule
+
+
+def costs_summary(book: ScheduleBook) -> dict[str, Any]:
+    """Which charge schedule priced the run, and how far to trust it (`digest` names the exact figures)."""
+    entry = book.entries[-1]
+    return {
+        "schedule_version": entry.schedule_version,
+        "status": book.status,
+        "source": entry.source,
+        "digest": book.digest(),
+    }
 
 
 def day(d: date | None) -> str | None:
@@ -70,11 +82,11 @@ def walk_forward_dict(w: WalkForward) -> dict[str, Any]:
     }
 
 
-def study_result(study: Study, settings: BacktestSettings, costs: CostSchedule) -> dict[str, Any]:
+def study_result(study: Study, settings: BacktestSettings, costs: ScheduleBook) -> dict[str, Any]:
     """Everything a run stores beside the contract's metrics and the trades."""
     return {
         "coverage": coverage_dict(study.coverage),
-        "costs": {"schedule_version": costs.schedule_version, "status": costs.status, "source": costs.source},
+        "costs": costs_summary(costs),
         "settings": settings.model_dump(mode="json", exclude={"grids"}),
         "grid": study.grid,
         "grid_skipped": study.grid_skipped,

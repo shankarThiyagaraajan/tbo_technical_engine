@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from tbo_technical_engine.backtest.costs import load_costs
-from tests.backtest.builders import ROOT, SETTINGS
+from tbo_costs import default_book
+
+from tests.backtest.builders import SETTINGS
 from tests.strategies.session import CONFIG
 
 
@@ -23,6 +24,6 @@ def test_the_runtime_cap_stays_under_the_brokers_redelivery_window() -> None:
     assert SETTINGS.caps.max_runtime_seconds + 180 < 3600
 
 
-def test_costs_are_a_labelled_placeholder_with_a_source_and_a_date() -> None:
-    costs = load_costs(ROOT / "config" / "costs.yaml")
-    assert costs.status == "placeholder" and "2026-10-15" in costs.source
+def test_costs_are_the_kits_schedule_and_say_they_are_not_confirmed_yet() -> None:
+    costs = default_book()
+    assert costs.status == "unverified" and "zerodha.com" in costs.entries[-1].source

@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from tbo_costs import ScheduleBook
 from tbo_platform_kit.ids import new_ulid
 from tbo_platform_kit.logging import get_logger
 from tbo_platform_kit.problems import Problem
@@ -25,7 +26,6 @@ from tbo_technical_engine.backtest.overrides import OverrideError, for_backtest
 from tbo_technical_engine.backtest.report import contract_metrics, study_result
 from tbo_technical_engine.backtest.study import run_study
 from tbo_technical_engine.schemas.backtest import BacktestCreate, BacktestSettings, ParamOverride, Trade
-from tbo_technical_engine.schemas.costs import CostSchedule
 from tbo_technical_engine.schemas.strategy import StrategyFile
 from tbo_technical_engine.store import backtests as store
 from tbo_technical_engine.store.research_cache import ResearchCache
@@ -128,7 +128,7 @@ class BacktestRunner:
         sessions: async_sessionmaker[AsyncSession],
         strategies: StrategyFile,
         settings: BacktestSettings,
-        costs: CostSchedule,
+        costs: ScheduleBook,
         cache: ResearchCache,
         rules: RulesLoader | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),

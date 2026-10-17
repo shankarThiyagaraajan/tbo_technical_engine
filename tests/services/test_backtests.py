@@ -61,7 +61,7 @@ async def test_a_run_stores_metrics_trades_coverage_costs_and_the_evidence(sessi
     result = r.result
     assert result["coverage"]["isins_with_data"] == 1 and result["coverage"]["trading_days"] == 8
     assert result["coverage"]["first_candle_date"] == FIRST.isoformat() and result["coverage"]["gate_applied"] is False
-    assert result["costs"]["status"] == "placeholder"  # the owner must see that the figures are not his
+    assert result["costs"]["status"] == "unverified"  # the figures come from the published page, not from his trades
     assert result["settings"]["execution"]["slippage_bps"] == "2"
     assert result["statistics"]["sharpe"] is not None
     counts = result["counts"]

@@ -9,6 +9,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
+from tbo_costs import ScheduleBook
+
 from tbo_technical_engine.backtest.engine import DayRules, coverage, run_grid
 from tbo_technical_engine.backtest.metrics import summarize
 from tbo_technical_engine.backtest.overrides import for_backtest
@@ -23,7 +25,6 @@ from tbo_technical_engine.schemas.backtest import (
     Trade,
     WalkForward,
 )
-from tbo_technical_engine.schemas.costs import CostSchedule
 from tbo_technical_engine.schemas.strategy import StrategyFile
 
 
@@ -54,7 +55,7 @@ def run_study(
     start: date,
     end: date,
     settings: BacktestSettings,
-    costs: CostSchedule,
+    costs: ScheduleBook,
     rules: DayRules | None,
     *,
     tick: Callable[[], None] | None = None,

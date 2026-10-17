@@ -6,17 +6,17 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from tbo_technical_engine.backtest.costs import load_costs
+from tbo_costs import ScheduleBook, default_book
+
 from tbo_technical_engine.schemas.backtest import Execution
 from tbo_technical_engine.schemas.candle import Candle
-from tbo_technical_engine.schemas.costs import CostSchedule
 from tbo_technical_engine.schemas.signal import SignalCandidate
 from tbo_technical_engine.services.backtests import load_settings
 from tests.support import ISIN_A, session_start
 
 ROOT = Path(__file__).resolve().parents[2]
 DAY = date(2026, 10, 15)
-COSTS = load_costs(ROOT / "config" / "costs.yaml")
+COSTS = default_book()
 SETTINGS = load_settings(ROOT / "config" / "backtest.yaml")
 
 
@@ -26,14 +26,23 @@ def execution(**changes: object) -> Execution:
     return SETTINGS.execution.model_copy(update=base)
 
 
-def free() -> CostSchedule:
+def free() -> ScheduleBook:
     """A schedule that charges nothing, to test price paths without cost noise."""
-    return COSTS.model_copy(
-        update={k: Decimal(0) for k in (
-            "brokerage_pct", "brokerage_cap", "stt_sell_pct", "exchange_txn_pct", "sebi_per_crore",
-            "stamp_buy_pct", "ipft_per_crore", "gst_pct",
-        )}
-    )  # fmt: skip
+    zero = Decimal(0)
+    entry = COSTS.entries[-1]
+    segment = entry.intraday.model_copy(
+        update={"brokerage_pct": zero, "brokerage_cap": zero, "stt_sell_pct": zero, "stamp_buy_pct": zero}
+    )
+    rates = entry.model_copy(
+        update={
+            "intraday": segment,
+            "gst_pct": zero,
+            "sebi_per_crore": zero,
+            "ipft_per_crore": zero,
+            "exchange_txn_pct": entry.exchange_txn_pct.model_copy(update={"NSE": zero, "BSE": zero}),
+        }
+    )
+    return ScheduleBook(entries=[rates])
 
 
 def at(index: int, day: date = DAY) -> datetime:

@@ -11,6 +11,8 @@ requires-python = ">=3.12"
 dependencies = [
   "tbo-platform-kit[sentry]~=1.0",
   "tbo-contracts>=1.1,<2",
+  "tbo-costs",  # the charge calculator and schedule (backtest/simulate.py); pinned by commit in [tool.uv.sources]
+  "tbo-paper-fills",  # the fill model (backtest/simulate.py); the same pin
   "tbo-signals",  # the signals library (config/signals.yaml); pinned by commit in [tool.uv.sources]
   "numpy~=2.2.0",
   "polars~=1.44.0",
@@ -42,6 +44,8 @@ dev = [
 [tool.uv.sources]
 tbo-platform-kit = { git = "https://github.com/shankarThiyagaraajan/tbo_platform", rev = "4e92fc0739500379c9cad8334ee09391c8ed8e61", subdirectory = "packages/tbo_platform_kit" }
 tbo-contracts = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts", rev = "39085e3eab07e30df6737a6a5ab7d6a1016827e4" }  # 1.10.0, not tagged yet (only the Release workflow tags)
+tbo-costs = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "afa5d1466ef8c853815fd8bec8f4a24eb3e7c780", subdirectory = "packages/tbo_costs" }
+tbo-paper-fills = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "afa5d1466ef8c853815fd8bec8f4a24eb3e7c780", subdirectory = "packages/tbo_paper_fills" }
 tbo-signals = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "28bb6390ec010024f71c5e99c127236c1d0a3a1e", subdirectory = "packages/tbo_signals" }
 
 

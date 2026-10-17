@@ -1,14 +1,15 @@
 """The research report as Markdown: one section per strategy, out-of-sample shown on its own, with the data's real
-coverage and the caveats (placeholder costs, too few trades) at the top where nobody can miss them."""
+coverage and the caveats (unconfirmed costs, too few trades) at the top where nobody can miss them."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import date
 
+from tbo_costs import ScheduleBook
+
 from tbo_technical_engine.backtest.study import Study
 from tbo_technical_engine.schemas.backtest import BacktestSettings, Metrics
-from tbo_technical_engine.schemas.costs import CostSchedule
 
 
 def _row(label: str, m: Metrics) -> str:
@@ -36,7 +37,7 @@ def render(
     start: date,
     end: date,
     settings: BacktestSettings,
-    costs: CostSchedule,
+    costs: ScheduleBook,
     title: str = "Backtest report",
     banner: str | None = None,
 ) -> str:
@@ -54,9 +55,11 @@ def render(
         "",
     ]
     if costs.status != "confirmed":
+        entry = costs.entries[-1]
         lines.append(
-            f"- **Costs are a placeholder** (`{costs.schedule_version}`; {costs.source}). "
-            "Replace the figures in `config/costs.yaml` with your broker's before relying on any expectancy below."
+            f"- **Costs are {costs.status}** (`{entry.schedule_version}`, digest `{costs.digest()}`; {entry.source}). "
+            "They are approximate until the schedule is checked against the broker's own calculator; "
+            "do not rely on any expectancy below to the paisa."
         )
     lines.append(
         "- **Out-of-sample** rows are the walk-forward test windows only: parameters were chosen on the earlier "

@@ -45,8 +45,8 @@ class Settings(ComponentSettings, short_name=SHORT_NAME, repository=REPOSITORY):
     """The swing analysis parameters (`config/swing.yaml`); read by the daily snapshot job, and a bad file stops it."""
     backtest_file: Path = Path("config/backtest.yaml")
     """Caps, execution assumptions, walk-forward windows and parameter grids for backtests (TE5)."""
-    costs_file: Path = Path("config/costs.yaml")
-    """The trading-cost schedule for backtests. Placeholder figures until the owner confirms them (TE5)."""
+    costs_file: Path | None = None
+    """A charge schedule to use instead of the one shipped in `tbo_costs` (a dated list; unset = the shipped one)."""
     signals_file: Path = Path("config/signals.yaml")
     """The service's signals (tbo_signals): ids, kinds, labels, links. A bad file stops the process at start."""
     signals_metrics_port: int | None = None

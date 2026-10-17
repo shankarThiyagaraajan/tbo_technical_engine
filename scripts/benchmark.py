@@ -36,10 +36,10 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+from tbo_costs import default_book
 from tbo_platform_kit.calendar import TradingCalendar
 from tbo_platform_kit.config.calendar import IST
 
-from tbo_technical_engine.backtest.costs import load_costs
 from tbo_technical_engine.backtest.replay import replay_stock
 from tbo_technical_engine.backtest.study import run_study
 from tbo_technical_engine.schemas.candle import Candle
@@ -104,7 +104,7 @@ def sweep_mode(args: argparse.Namespace) -> dict[str, Any]:
     """A full study (base run plus the parameter grid and walk-forward) of every active strategy."""
     file = load_strategies(ROOT / "config" / "strategies.yaml")
     settings = load_settings(ROOT / "config" / "backtest.yaml")
-    costs = load_costs(ROOT / "config" / "costs.yaml")
+    costs = default_book()
     spec = SyntheticSpec(stocks=args.stocks, sessions=args.sessions + args.warmup, end=END, seed=args.seed)
     days = weekdays_ending(END, spec.sessions)
     cache_dir = Path(args.cache)

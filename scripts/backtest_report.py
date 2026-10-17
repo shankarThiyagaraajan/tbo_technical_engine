@@ -16,7 +16,8 @@ import time
 from datetime import date
 from pathlib import Path
 
-from tbo_technical_engine.backtest.costs import load_costs
+from tbo_costs import default_book
+
 from tbo_technical_engine.backtest.study import Study, run_study
 from tbo_technical_engine.backtest.summary import render
 from tbo_technical_engine.services.backtests import load_settings
@@ -41,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
 
     file = load_strategies(ROOT / "config" / "strategies.yaml")
     settings = load_settings(ROOT / "config" / "backtest.yaml")
-    costs = load_costs(ROOT / "config" / "costs.yaml")
+    costs = default_book()
     cache = ResearchCache(args.cache)
     isins = args.isins.split(",") if args.isins else sorted(p.stem for p in (args.cache / "5m").glob("*.parquet"))
     names = args.strategies.split(",") if args.strategies else [n for n, s in file.strategies.items() if s.is_active]

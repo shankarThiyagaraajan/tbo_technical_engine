@@ -24,7 +24,8 @@ from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from tbo_technical_engine.backtest.costs import load_costs
+from tbo_costs import default_book
+
 from tbo_technical_engine.backtest.replay import replay_stock
 from tbo_technical_engine.backtest.study import run_study
 from tbo_technical_engine.indicators.bars import Bars
@@ -67,7 +68,7 @@ def digests(stocks: int = 4, sessions: int = 5, warmup: int = 12, seed: int = 21
         settings = load_settings(ROOT / "config" / "backtest.yaml")
         study = run_study(
             file, STUDY_STRATEGY, [], None, isins, cache.stock, {i: cache.session_dates(i, "5m") for i in isins},
-            days[warmup], days[-1], settings, load_costs(ROOT / "config" / "costs.yaml"), None,
+            days[warmup], days[-1], settings, default_book(), None,
             monotonic=time.monotonic, deadline=float("inf"),
         )  # fmt: skip
         text = json.dumps(

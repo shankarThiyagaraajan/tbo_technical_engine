@@ -13,13 +13,13 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal
 
+from tbo_costs import ScheduleBook
 from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.backtest.replay import Tape, build_tape, entry_windows, replay_tape
 from tbo_technical_engine.backtest.simulate import simulate
 from tbo_technical_engine.backtest.walkforward import Combo
 from tbo_technical_engine.schemas.backtest import Coverage, Execution, Side, StockData, Trade
-from tbo_technical_engine.schemas.costs import CostSchedule
 from tbo_technical_engine.schemas.strategy import StrategyFile
 from tbo_technical_engine.utils.timeframes import length
 
@@ -68,7 +68,7 @@ def run_grid(
     start: date,
     end: date,
     execution: Execution,
-    schedule: CostSchedule,
+    schedule: ScheduleBook,
     rules: DayRules | None,
     tick: Progress | None = None,
     *,
@@ -128,7 +128,7 @@ def _trade_stock(
     isin: str,
     stock: StockData,
     execution: Execution,
-    schedule: CostSchedule,
+    schedule: ScheduleBook,
     rules: DayRules | None,
 ) -> None:
     """One parameter set's candidates for one stock, filled and exited, added to `out`."""
@@ -163,7 +163,7 @@ def run_strategy(
     start: date,
     end: date,
     execution: Execution,
-    schedule: CostSchedule,
+    schedule: ScheduleBook,
     rules: DayRules | None,
     tick: Progress | None = None,
 ) -> RunOutcome:

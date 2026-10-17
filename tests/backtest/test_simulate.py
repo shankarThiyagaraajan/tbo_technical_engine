@@ -10,11 +10,13 @@ from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
-from tbo_technical_engine.backtest.costs import leg_charges
+from tbo_costs import Order, charge_orders
+
 from tbo_technical_engine.backtest.simulate import simulate
 from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.schemas.signal import SignalCandidate
-from tests.backtest.builders import COSTS, at, bar, candidate, execution, flat, free
+from tests.backtest.builders import COSTS, DAY, at, bar, candidate, execution, flat, free
+from tests.support import ISIN_A
 
 D = Decimal
 
@@ -154,12 +156,11 @@ def test_charges_are_taken_for_the_entry_and_every_exit_leg() -> None:
         COSTS,
     )
     assert trade is not None
-    expected = (
-        leg_charges(COSTS, "buy", D("100.00"), 1000)
-        + leg_charges(COSTS, "sell", D("101.50"), 500)
-        + leg_charges(COSTS, "sell", D("102.50"), 500)
-    )
-    assert trade.costs == expected.quantize(D("0.01"))
+    orders = [
+        Order(scrip=ISIN_A, segment="intraday", exchange="NSE", side=side, price=price, quantity=qty, trade_date=DAY)
+        for side, price, qty in (("buy", "100.00", 1000), ("sell", "101.50", 500), ("sell", "102.50", 500))
+    ]
+    assert trade.costs == charge_orders(orders, COSTS).total.quantize(D("0.01"))
     assert trade.r < trade.gross_r  # charges only ever reduce R
 
 
