@@ -12,6 +12,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.logging import get_logger
+from tbo_signals import Signals
 
 from tbo_technical_engine import outbox
 from tbo_technical_engine.api.shapes import candidate_dict
@@ -42,6 +43,8 @@ class SignalRunner:
         self.publisher = publisher
         self.cooldowns = cooldowns
         self.clock = clock
+        self.signals: Signals | None = None
+        """Counts stored candidates and published events (`technical.signal_candidates`, `technical.signal_events`)."""
 
     async def __call__(self, candle: Candle) -> None:
         """Evaluate `candle`; no-op when no strategy fired."""
@@ -64,4 +67,6 @@ class SignalRunner:
             await self.cooldowns.mark(c)
             log.info("signal_candidate", strategy=c.strategy, side=c.side, isin=c.isin, strength=c.strength)
         if stored:
-            await outbox.flush_after_commit(self.sessions, self.publisher)
+            if self.signals is not None:
+                self.signals.emit("technical.signal_candidates", stored)
+            await outbox.flush_after_commit(self.sessions, self.publisher, self.signals)

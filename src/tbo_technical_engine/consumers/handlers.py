@@ -12,6 +12,7 @@ from tbo_platform_kit.events import EventConsumer, Outcome
 from tbo_platform_kit.logging import get_logger
 from tbo_platform_kit.metrics import Metrics
 from tbo_platform_kit.mode import ModeProfile
+from tbo_signals import Signals
 
 from tbo_technical_engine.schemas.candle import FeedStatus, UniverseSnapshot
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
@@ -71,12 +72,19 @@ def candle_consumer(
 
 
 def feed_consumer(
-    redis: Redis, profile: ModeProfile, readiness: Readiness, name: str, metrics: Metrics | None = None
+    redis: Redis,
+    profile: ModeProfile,
+    readiness: Readiness,
+    name: str,
+    metrics: Metrics | None = None,
+    signals: Signals | None = None,
 ) -> EventConsumer:
     """Reads `feed.status` events so readiness knows whether the feed is healthy."""
 
     async def handle(event: dict[str, Any], session: AsyncSession | None) -> None:
         readiness.on_feed_status(FeedStatus.model_validate(event["data"]))
+        if signals is not None:
+            signals.activity("technical.worker", True, worker="feed")
 
     return RecreatingConsumer(
         redis, profile, stream=FEED_STREAM, group="technical.feed", consumer=name, handler=handle, metrics=metrics
@@ -90,6 +98,7 @@ def universe_consumer(
     buffer: CandleBuffer,
     name: str,
     metrics: Metrics | None = None,
+    signals: Signals | None = None,
 ) -> EventConsumer:
     """Reads `universe.published` events: a newer universe replaces the stock list, and candles of stocks that dropped
     out are forgotten."""
@@ -102,6 +111,8 @@ def universe_consumer(
         )
         if universe.offer(snapshot):
             buffer.forget(before - universe.isins)
+        if signals is not None:
+            signals.activity("technical.worker", True, worker="universe")
 
     return RecreatingConsumer(
         redis,

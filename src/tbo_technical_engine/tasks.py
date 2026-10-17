@@ -23,6 +23,7 @@ from tbo_technical_engine.clients import fundamental
 from tbo_technical_engine.config.settings import REPOSITORY, SHORT_NAME, Settings
 from tbo_technical_engine.services import backtests as backtest_service
 from tbo_technical_engine.services import point_in_time
+from tbo_technical_engine.services.platform_signals import process_signals
 from tbo_technical_engine.services.snapshot_job import run_job
 from tbo_technical_engine.services.snapshot_service import IncompleteRun, Kind
 from tbo_technical_engine.services.strategy_loader import load_strategies
@@ -67,7 +68,7 @@ async def _flush() -> int:
     redis = aioredis.Redis.from_url(settings.redis_url.get_secret_value())
     try:
         publisher = EventPublisher(redis, settings.profile, source=REPOSITORY)
-        return await outbox.flush(session_factory(engine), publisher)
+        return await outbox.flush(session_factory(engine), publisher, process_signals(settings))
     finally:
         await redis.aclose()
         await engine.dispose()
@@ -112,7 +113,10 @@ async def _run_backtest(backtest_id: str) -> str:
             ResearchCache(settings.research_cache_dir),
             rules,
         )
-        return await runner.execute(backtest_id)
+        status = await runner.execute(backtest_id)
+        if status in ("succeeded", "failed"):  # "missing" and "busy" are not an end
+            process_signals(settings).event("technical.backtest_finished", status=status)
+        return status
     finally:
         if funds_http is not None:
             await funds_http.aclose()

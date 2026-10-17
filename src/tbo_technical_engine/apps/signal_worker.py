@@ -23,11 +23,14 @@ from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.http_client import IssuerTokenProvider, ServiceClient, UpstreamUnavailable
 from tbo_platform_kit.logging import configure_logging, get_logger
 from tbo_platform_kit.metrics import Metrics
+from tbo_signals import Signals
 
+from tbo_technical_engine import outbox
 from tbo_technical_engine.clients import fundamental, market_feed
 from tbo_technical_engine.config.settings import REPOSITORY, Settings
 from tbo_technical_engine.consumers.handlers import candle_consumer, feed_consumer, universe_consumer
 from tbo_technical_engine.context.index_source import IndexSource
+from tbo_technical_engine.schemas.latency import BoundaryLatency
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
 from tbo_technical_engine.services.context_service import ContextService
 from tbo_technical_engine.services.cooldowns import CooldownStore
@@ -35,6 +38,12 @@ from tbo_technical_engine.services.evaluator import StrategyEvaluator
 from tbo_technical_engine.services.indicator_engine import IndicatorEngine
 from tbo_technical_engine.services.ingest import CandleIngest
 from tbo_technical_engine.services.latency import LatencyRecorder, LatencyTracker
+from tbo_technical_engine.services.platform_signals import (
+    build_signals,
+    report_boundaries,
+    serve_metrics,
+    stream_backlog,
+)
 from tbo_technical_engine.services.readiness import Readiness
 from tbo_technical_engine.services.recorder import IndicatorRecorder
 from tbo_technical_engine.services.signal_runner import SignalRunner
@@ -61,8 +70,12 @@ class SignalWorker:
         metrics: Metrics | None = None,
         calendar: TradingCalendar | None = None,
         index_source: IndexSource | None = None,
+        signals: Signals | None = None,
     ) -> None:
         self.settings = settings
+        self.signals = signals
+        self.redis = redis
+        self.sessions = sessions
         self.funds = funds
         self.buffer = CandleBuffer()
         self.readiness = Readiness()
@@ -79,6 +92,7 @@ class SignalWorker:
         )
         self.tracker = LatencyTracker(calendar, now_utc)
         self.ingest.tracker = self.tracker
+        self.ingest.signals = signals
         self.latency = LatencyRecorder(sessions)
         self.supervisor = WarmupSupervisor(
             feed,
@@ -110,14 +124,15 @@ class SignalWorker:
             narrow_pct=settings.cpr_narrow_pct,
             wide_pct=settings.cpr_wide_pct,
         )
+        self.context.signals = signals
         self.evaluator.index_side = self.context.index_side
-        self.ingest.evaluators.append(
-            SignalRunner(self.evaluator, sessions, publisher, CooldownStore(redis, profile), now_utc)
-        )
+        runner = SignalRunner(self.evaluator, sessions, publisher, CooldownStore(redis, profile), now_utc)
+        runner.signals = signals
+        self.ingest.evaluators.append(runner)
         self.consumers = [
             candle_consumer(redis, profile, self.ingest, name, metrics),
-            feed_consumer(redis, profile, self.readiness, name, metrics),
-            universe_consumer(redis, profile, self.universe, self.buffer, name, metrics),
+            feed_consumer(redis, profile, self.readiness, name, metrics, signals),
+            universe_consumer(redis, profile, self.universe, self.buffer, name, metrics, signals),
         ]
 
     async def ensure_universe(self, today: date) -> None:
@@ -133,6 +148,17 @@ class SignalWorker:
         if fetched is not None:
             self.universe.offer(fetched)
 
+    async def report_signals(self, rows: list[BoundaryLatency]) -> None:
+        """The supervisor's numbers for the board: boundaries that closed, the candle backlog, the outbox queue. A tick
+        that got this far is the supervisor's heartbeat."""
+        if self.signals is None:
+            return
+        report_boundaries(self.signals, rows)
+        candles = self.consumers[0]
+        self.signals.emit("technical.candles_waiting", await stream_backlog(self.redis, candles.stream, candles.group))
+        self.signals.emit("technical.outbox_waiting", await outbox.waiting(self.sessions))
+        self.signals.activity("technical.worker", True, worker="supervisor")
+
     async def supervise(self, stop: asyncio.Event) -> None:
         """The 15-second loop: make sure a universe is known, then warm-up/readiness and the market-context boundary.
         A failing tick is logged and the loop goes on; only a stop request or cancellation ends it."""
@@ -141,12 +167,16 @@ class SignalWorker:
                 await self.ensure_universe(now_utc().astimezone(IST).date())
                 await self.supervisor.tick()
                 await self.context.tick()
-                self.latency.add(self.tracker.close_due(len(self.universe.isins), self.readiness.feed_healthy))
+                rows = self.tracker.close_due(len(self.universe.isins), self.readiness.feed_healthy)
+                self.latency.add(rows)
                 await self.latency.flush()
+                await self.report_signals(rows)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # one bad tick must not end the worker
                 log.error("supervisor_tick_failed", error=type(exc).__name__)
+                if self.signals is not None:
+                    self.signals.activity("technical.worker", False, worker="supervisor")
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), TICK_SECONDS)
 
@@ -180,6 +210,8 @@ async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
         str(settings.fundamental_url), audience=fundamental.AUDIENCE, scopes=fundamental.SCOPES, tokens=tokens
     )
     metrics = Metrics(settings.short_name, settings.version, settings.profile.mode.value)
+    signals = build_signals(settings, metrics.registry)
+    serve_metrics(settings, signals)
     try:
         worker = SignalWorker(
             settings,
@@ -188,9 +220,11 @@ async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
             market_feed.MarketFeedClient(feed_http),
             fundamental.FundamentalClient(fund_http),
             metrics,
+            signals=signals,
         )
         await worker.run(stop)
     finally:
+        signals.close()
         await feed_http.aclose()
         await fund_http.aclose()
         await redis.aclose()

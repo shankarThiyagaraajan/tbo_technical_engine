@@ -42,3 +42,8 @@ class Settings(ComponentSettings, short_name=SHORT_NAME, repository=REPOSITORY):
     """Caps, execution assumptions, walk-forward windows and parameter grids for backtests (TE5)."""
     costs_file: Path = Path("config/costs.yaml")
     """The trading-cost schedule for backtests. Placeholder figures until the owner confirms them (TE5)."""
+    signals_file: Path = Path("config/signals.yaml")
+    """The service's signals (tbo_signals): ids, kinds, labels, links. A bad file stops the process at start."""
+    signals_metrics_port: int | None = None
+    """A port for the signal worker's own metrics (it has no API). Unset: not served.
+    The level is TBO_TECHNICAL_SIGNALS."""

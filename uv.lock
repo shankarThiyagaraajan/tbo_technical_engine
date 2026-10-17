@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.12"
 
 [manifest]
-overrides = [{ name = "tbo-contracts", git = "https://github.com/shankarThiyagaraajan/tbo_contracts?tag=v1.2.0" }]
+overrides = [{ name = "tbo-contracts", git = "https://github.com/shankarThiyagaraajan/tbo_contracts?rev=ef372dbfc0421fb9d5729a60a5ed2feb2b4fab01" }]
 
 [[package]]
 name = "alembic"
@@ -3342,8 +3342,8 @@ wheels = [
 
 [[package]]
 name = "tbo-contracts"
-version = "1.2.0"
-source = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts?tag=v1.2.0#23be1c59a1960188cd5dd3950dd4c05ee5b3fa23" }
+version = "1.4.0"
+source = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts?rev=ef372dbfc0421fb9d5729a60a5ed2feb2b4fab01#ef372dbfc0421fb9d5729a60a5ed2feb2b4fab01" }
 dependencies = [
     { name = "jsonschema" },
     { name = "pydantic" },
@@ -3381,6 +3381,18 @@ sentry = [
 ]
 
 [[package]]
+name = "tbo-signals"
+version = "0.1.0"
+source = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit?subdirectory=packages%2Ftbo_signals&rev=e0967da6fbfc2f09e1f92fc497f7faf7adb22643#e0967da6fbfc2f09e1f92fc497f7faf7adb22643" }
+dependencies = [
+    { name = "prometheus-client" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "redis" },
+    { name = "tbo-contracts" },
+]
+
+[[package]]
 name = "tbo-technical-engine"
 version = "0.1.0"
 source = { editable = "." }
@@ -3391,6 +3403,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tbo-contracts" },
     { name = "tbo-platform-kit", extra = ["sentry"] },
+    { name = "tbo-signals" },
     { name = "vectorbt" },
 ]
 
@@ -3417,8 +3430,9 @@ requires-dist = [
     { name = "plotly", specifier = "<6" },
     { name = "polars", specifier = "~=1.44.0" },
     { name = "pyyaml", specifier = ">=6,<7" },
-    { name = "tbo-contracts", git = "https://github.com/shankarThiyagaraajan/tbo_contracts?tag=v1.2.0" },
+    { name = "tbo-contracts", git = "https://github.com/shankarThiyagaraajan/tbo_contracts?rev=ef372dbfc0421fb9d5729a60a5ed2feb2b4fab01" },
     { name = "tbo-platform-kit", extras = ["sentry"], git = "https://github.com/shankarThiyagaraajan/tbo_platform?subdirectory=packages%2Ftbo_platform_kit&rev=bfaaabf54981055950ae03bad9ed14c384c83c9c" },
+    { name = "tbo-signals", git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit?subdirectory=packages%2Ftbo_signals&rev=e0967da6fbfc2f09e1f92fc497f7faf7adb22643" },
     { name = "vectorbt", specifier = ">=0.28,<0.29" },
 ]
 

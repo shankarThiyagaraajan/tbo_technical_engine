@@ -18,10 +18,11 @@ from tbo_platform_kit.http_server import Verifier, create_app, database_check, r
 from tbo_platform_kit.idempotency import IdempotencyStore
 from tbo_platform_kit.metrics import Metrics
 
-from tbo_technical_engine.api import context, research, signals, snapshots
+from tbo_technical_engine.api import context, research, signal_manifest, signals, snapshots
 from tbo_technical_engine.config.settings import REPOSITORY, Settings
 from tbo_technical_engine.services.backtests import enqueue_with_celery, load_settings
 from tbo_technical_engine.services.latency_gauges import LatencyGauges, refresh_forever
+from tbo_technical_engine.services.platform_signals import build_signals
 from tbo_technical_engine.services.strategy_loader import load_strategies
 from tbo_technical_engine.store.tables import metadata
 
@@ -60,13 +61,14 @@ def build_app(settings: Settings | None = None, *, verifier: Verifier | None = N
         metrics=metrics,
         lifespan=lifespan,
     )
-    for router in (signals.router, context.router, snapshots.router, research.router):
+    for router in (signals.router, signal_manifest.router, context.router, snapshots.router, research.router):
         app.include_router(router)
     state: Any = app.state
     state.engine = engine
     state.sessions = session_factory(engine)
     state.redis = redis
     state.settings = settings
+    state.signals = build_signals(settings, metrics.registry)
     state.strategies = load_strategies(settings.strategies_file)
     state.backtest_settings = load_settings(settings.backtest_file)
     state.idempotency = IdempotencyStore(metadata, state.sessions)

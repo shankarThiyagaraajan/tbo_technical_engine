@@ -21,7 +21,7 @@ security:
 # directory on multi-user hosts) is ignored on purpose: pytest is a dev-only dependency, never in the image, and the
 # fix (pytest 9) needs pytest-asyncio 1.x, which is a separate change. Drop the ignore when pytest moves to 9.
 audit:
-	uv export -q --frozen --no-emit-project --no-hashes --no-emit-package tbo-contracts --no-emit-package tbo-platform-kit -o .audit-requirements.txt
+	uv export -q --frozen --no-emit-project --no-hashes --no-emit-package tbo-contracts --no-emit-package tbo-platform-kit --no-emit-package tbo-signals -o .audit-requirements.txt
 	uv run pip-audit -r .audit-requirements.txt --no-deps --disable-pip --ignore-vuln PYSEC-2026-1845 \
 		|| (rm -f .audit-requirements.txt; exit 1)
 	rm -f .audit-requirements.txt
