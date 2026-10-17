@@ -1,0 +1,58 @@
+# Backtest harness settings. Starting values: change one and the result of every later backtest changes with it, so
+# each result stores the values it ran with (`result.settings`).
+
+# Caps on a request. A larger request is refused with 422 (size) or 429 (concurrency), never queued.
+caps:
+  max_isins: 500                 # the contract's own maximum
+  max_range_days: 400            # calendar days between from_date and to_date
+  max_stock_days: 40000          # ISINs x calendar days, when ISINs are listed. Replay costs about 0.07 s per stock-session
+                                 # (measured, TE5); 40,000 x 5/7 sessions is about 32 minutes for one parameter set
+  max_concurrent_jobs: 2         # queued + running; the research queue has its own workers
+  max_runtime_seconds: 3300      # a job is stopped after this. Under the broker's 3600 s redelivery window on purpose:
+                                 # a longer job would be handed to a second worker while the first still runs.
+
+# How a candidate becomes a trade. The strategies decide the signal; these decide what a broker would have done.
+execution:
+  notional_per_trade: "100000"   # rupees per trade; quantity = floor(notional / entry price)
+  slippage_bps: "2"              # adverse, on every fill (entry, targets, stops, time exit): 2 bps = 0.02%
+  entry_wait_bars: 1             # a limit order at the far edge of the entry zone lives this many 5-minute candles
+  t1_fraction: "0.5"             # share of the position sold at target 1; the rest runs to target 2
+  stop_to_entry_after_t1: true   # after target 1 the stop on the rest moves to the entry price
+  square_off: "15:15"            # IST; open trades close at the open of the candle starting here (MIS square-off)
+  one_position_per_stock: true   # no new trade in a stock + strategy while one is open
+  same_bar_rule: stop_first      # a candle that touches both stop and target counts as a stop (the pessimistic order)
+
+# Walk-forward: each fold fits on `train_days` trading days and is judged on the `test_days` after them, then the
+# window moves forward by `test_days`. Out-of-sample = the test windows only; they never overlap.
+walk_forward:
+  train_days: 60
+  test_days: 20
+  min_trades_train: 10           # a parameter set with fewer trades in a train window is not eligible to be chosen
+  stability_band: "0.8"          # a neighbour counts as "about as good" if its train expectancy is >= this x the best's
+
+# Per-strategy evidence summary the decision engine attaches to a call.
+evidence:
+  min_trades: 30                 # below this the summary is marked `low_sample`
+
+# Parameters tried by the walk-forward and stability report: the value in strategies.yaml and its neighbours.
+# Strings, like strategies.yaml. A strategy missing here has no grid and is evaluated at its fixed parameters.
+grids:
+  ema_9_21_crossover:
+    adx_min: ["15", "20", "25"]
+    target_1_r: ["1", "1.5", "2"]
+  vwap_breakout:
+    volume_ratio_min: ["1.2", "1.5", "2"]
+    stop_atr: ["0.5", "0.75"]
+  orb_15m:
+    volume_ratio_min: ["1.2", "1.5", "2"]
+    target_1_range: ["0.75", "1", "1.25"]
+  pivot_supertrend:
+    min_room_pct: ["0.1", "0.2", "0.3"]
+  vwap_pivot:
+    confluence_pct: ["0.15", "0.25", "0.35"]
+    stop_atr: ["0.25", "0.5"]
+
+# Reporting only (never changes a trade): the capital a daily profit is divided by to get a return for Sharpe and
+# drawdown %.
+reporting:
+  reference_capital: "1000000"   # rupees

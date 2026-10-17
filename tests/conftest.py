@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from tbo_platform_kit.testing import TestKeys
 
 from tbo_technical_engine.app import build_app
-from tbo_technical_engine.settings import REPOSITORY, SHORT_NAME, Settings
+from tbo_technical_engine.config.settings import REPOSITORY, SHORT_NAME, Settings
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = f"TBO_{SHORT_NAME.upper()}_"
@@ -79,7 +79,7 @@ def settings(database_url: str, redis_url: str, monkeypatch: pytest.MonkeyPatch)
 
 @pytest.fixture
 async def redis(redis_url: str) -> AsyncIterator[Any]:
-    client = aioredis.from_url(redis_url)
+    client = aioredis.Redis.from_url(redis_url)
     await client.flushdb()
     yield client
     await client.aclose()
@@ -100,10 +100,21 @@ async def client(app: Any) -> AsyncIterator[httpx.AsyncClient]:
 
 
 @pytest.fixture
-async def sessions(app: Any) -> AsyncIterator[Any]:
+async def sessions(app: Any) -> Any:
     """The app's session factory, with this component's tables emptied."""
     factory = app.state.sessions
     async with factory() as session, session.begin():
-        tables = ("indicator_snapshot", "signal_candidate", "market_context", "outbox")
+        tables = (
+            "indicator_snapshot",
+            "evaluation_boundary",
+            "signal_candidate",
+            "market_context",
+            "technical_snapshot",
+            "swing_setup",
+            "outbox",
+            "backtest",
+            "backtest_trade",
+            "strategy_evidence",
+        )
         await session.execute(text("TRUNCATE " + ", ".join(f"{SHORT_NAME}.{t}" for t in tables)))
     return factory

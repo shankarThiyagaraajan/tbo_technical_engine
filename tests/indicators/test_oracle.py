@@ -10,7 +10,7 @@ import pytest
 import talib
 
 from tbo_technical_engine import indicators
-from tbo_technical_engine.indicators.bars import Bars
+from tbo_technical_engine.indicators.bars import F64, Bars
 from tests.indicators.data import random_walk
 
 TOLERANCE = 1e-6
@@ -21,7 +21,7 @@ def bars() -> Bars:
     return random_walk(days=250)
 
 
-def same(ours: np.ndarray, oracle: np.ndarray) -> None:
+def same(ours: F64, oracle: F64) -> None:
     assert ours.shape == oracle.shape
     assert np.array_equal(np.isnan(ours), np.isnan(oracle)), "the warm-up (nan) region differs"
     ok = ~np.isnan(oracle)

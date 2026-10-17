@@ -14,9 +14,11 @@ from datetime import date, datetime, time, timedelta
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from tbo_platform_kit.calendar import IST, TradingCalendar
+from tbo_platform_kit.calendar import TradingCalendar
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.logging import get_logger
+from tbo_signals import Signals
 
 from tbo_technical_engine import outbox
 from tbo_technical_engine.context import compute
@@ -46,6 +48,9 @@ def boundary_of(now: datetime) -> datetime:
 
 
 class ContextService:
+    """Builds the market context at each 5-minute boundary of the session and publishes it once per boundary (stored
+    first, then announced through the outbox)."""
+
     def __init__(
         self,
         buffer: CandleBuffer,
@@ -66,6 +71,8 @@ class ContextService:
         self.publisher = publisher
         self.calendar = calendar
         self.clock = clock
+        self.signals: Signals | None = None
+        """Counts published events (`technical.signal_events`)."""
         self.source: IndexSource = source or NoIndexSource()
         self.narrow_pct = narrow_pct
         self.wide_pct = wide_pct
@@ -132,7 +139,7 @@ class ContextService:
         self._done = at
         self.latest = (at, context)
         if fresh:
-            await outbox.flush_after_commit(self.sessions, self.publisher)
+            await outbox.flush_after_commit(self.sessions, self.publisher, self.signals)
             log.info("market_context_published", context_at=context.context_at, quality=context.data_quality)
         return fresh
 

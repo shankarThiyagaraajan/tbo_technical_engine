@@ -16,6 +16,8 @@ MAX_PAGES = 20
 
 
 class FundamentalClient:
+    """Typed access to the fundamental engine; only the universe is needed here."""
+
     def __init__(self, client: ServiceClient) -> None:
         self.client = client
 
@@ -46,3 +48,25 @@ class FundamentalClient:
                     return None
                 return UniverseSnapshot(trade_date=day, universe_version=version, isins=tuple(isins))
         raise UpstreamUnavailable(AUDIENCE, "universe paging did not end")
+
+    async def gate(self, trade_date: date) -> dict[str, str] | None:
+        """The gate status of every stock in that day's universe (`GET /v1/gate?date=`), or None when that day's run
+        has not finished or never happened (404). Past dates never change, which is what makes a backtest repeatable."""
+        statuses: dict[str, str] = {}
+        cursor: str | None = None
+        for _ in range(MAX_PAGES):
+            params: dict[str, str | int] = {"limit": PAGE, "date": trade_date.isoformat()}
+            if cursor:
+                params["cursor"] = cursor
+            response = await self.client.get("/v1/gate", params=params)
+            if response.status_code == 404:
+                return None
+            if response.status_code != 200:
+                raise UpstreamUnavailable(AUDIENCE, f"GET /v1/gate answered {response.status_code}")
+            body = response.json()
+            for item in body["items"]:
+                statuses[item["isin"]] = item["status"]
+            cursor = body.get("next_cursor")
+            if not cursor:
+                return statuses or None
+        raise UpstreamUnavailable(AUDIENCE, "gate paging did not end")

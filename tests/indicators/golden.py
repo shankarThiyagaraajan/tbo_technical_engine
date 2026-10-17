@@ -17,7 +17,7 @@ from tests.indicators.data import random_walk
 
 PATH = Path(__file__).resolve().parents[1] / "fixtures" / "golden_indicators.json"
 AT = (300, 5000, 12345, 18749)
-SET = [
+SET: list[tuple[str, dict[str, float]]] = [
     ("ema", {"period": 9}),
     ("ema", {"period": 21}),
     ("sma", {"period": 20}),

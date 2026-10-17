@@ -24,10 +24,16 @@ NAN = math.nan
 
 
 class Stream(Protocol):
-    def update(self, bar: Bar) -> dict[str, float]: ...
+    """The live form: a small state machine fed one closed bar at a time."""
+
+    def update(self, bar: Bar) -> dict[str, float]:
+        """Consume one closed bar and return that bar's value for every output (nan while warming up)."""
+        ...
 
 
 class Indicator(ABC):
+    """The contract every indicator meets; `indicators.get(name, **params)` builds one."""
+
     @property
     @abstractmethod
     def outputs(self) -> tuple[str, ...]:
@@ -39,11 +45,14 @@ class Indicator(ABC):
         """Bars needed before the first valid value (0 means valid from the first bar of a session or series)."""
 
     @abstractmethod
-    def batch(self, bars: Bars) -> dict[str, F64]: ...
+    def batch(self, bars: Bars) -> dict[str, F64]:
+        """The whole series at once from NumPy arrays, one array per output name."""
 
     @abstractmethod
-    def stream(self) -> Stream: ...
+    def stream(self) -> Stream:
+        """A fresh live state machine that gives the same values as `batch` on every bar."""
 
 
 def full(n: int) -> F64:
+    """An array of `n` nans: the starting point of a batch output that is filled from `lookback` on."""
     return np.full(n, np.nan, dtype=np.float64)

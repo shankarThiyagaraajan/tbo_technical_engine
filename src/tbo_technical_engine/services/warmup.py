@@ -11,7 +11,8 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 
-from tbo_platform_kit.calendar import IST, TradingCalendar
+from tbo_platform_kit.calendar import TradingCalendar
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.http_client import UpstreamUnavailable
 from tbo_platform_kit.logging import get_logger
 
@@ -42,6 +43,8 @@ class WarmupSpec:
 
 @dataclass
 class WarmupResult:
+    """Which stocks ended the warm-up with enough history (`warm`) and which did not (`cold`)."""
+
     warm: set[str] = field(default_factory=set)
     cold: set[str] = field(default_factory=set)
 
@@ -55,6 +58,7 @@ def window_start(calendar: TradingCalendar, today: date, sessions: int) -> datet
 
 
 def is_warm(buffer: CandleBuffer, isin: str, spec: WarmupSpec) -> bool:
+    """True when the buffer holds the minimum number of candles of every timeframe the spec lists for `isin`."""
     return all(buffer.count(isin, tf) >= need for tf, need in spec.min_bars.items())
 
 

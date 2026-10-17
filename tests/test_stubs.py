@@ -9,12 +9,21 @@ import httpx
 import pytest
 from tbo_platform_kit.testing import TestKeys
 
-from tbo_technical_engine.settings import REPOSITORY
+from tbo_technical_engine.config.settings import REPOSITORY
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = json.loads((ROOT / "contract" / "openapi.json").read_text())
 # Add a path prefix here when a phase replaces its stub.
-IMPLEMENTED: tuple[str, ...] = ("/v1/indicators", "/v1/signals", "/v1/strategies", "/v1/context")
+IMPLEMENTED: tuple[str, ...] = (
+    "/v1/indicators",
+    "/v1/signals",
+    "/v1/signal-manifest",
+    "/v1/strategies",
+    "/v1/context",
+    "/v1/snapshots",
+    "/v1/swing-setups",
+    "/v1/backtests",
+)
 OPERATIONS = [
     (method.upper(), path, op["security"][0]["bearerAuth"][0])
     for path, item in DOC["paths"].items()

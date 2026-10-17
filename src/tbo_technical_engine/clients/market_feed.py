@@ -22,6 +22,8 @@ MAX_PAGES = 100
 
 
 class MarketFeedClient:
+    """Typed access to the market feed over the platform's authenticated `ServiceClient`."""
+
     def __init__(self, client: ServiceClient) -> None:
         self.client = client
 
@@ -54,6 +56,7 @@ class MarketFeedClient:
         raise UpstreamUnavailable(AUDIENCE, "candle paging did not end")
 
     async def feed_status(self) -> FeedStatus:
+        """The feed's current health; raises UpstreamUnavailable on any non-200 answer."""
         response = await self.client.get("/v1/feed/status")
         if response.status_code != 200:
             raise UpstreamUnavailable(AUDIENCE, f"GET /v1/feed/status answered {response.status_code}")

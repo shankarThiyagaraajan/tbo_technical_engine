@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
 from tbo_technical_engine.services.warmup import WarmupSpec, is_warm, warm_up, window_start
@@ -33,7 +33,7 @@ async def test_history_fills_the_buffer_and_stocks_become_warm() -> None:
 
 
 async def test_a_stock_with_too_little_history_stays_cold() -> None:
-    thin = [c for c in session_candles(ISIN_A, "5m", date(2026, 10, 14))]
+    thin = list(session_candles(ISIN_A, "5m", date(2026, 10, 14)))
     result = await warm_up(FakeFeed(thin).client(), CandleBuffer(), [ISIN_A], NOW, CALENDAR, WarmupSpec())
     assert result.cold == {ISIN_A} and not result.warm
 

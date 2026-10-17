@@ -13,9 +13,12 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from tbo_platform_kit.logging import get_logger
+from tbo_signals import Signals
 
+from tbo_technical_engine.config import latency as outcomes
 from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
+from tbo_technical_engine.services.latency import LatencyTracker
 from tbo_technical_engine.services.readiness import Readiness
 from tbo_technical_engine.services.universe import UniverseHolder
 from tbo_technical_engine.services.warmup import WarmupSpec, is_warm
@@ -30,6 +33,9 @@ STORED_TIMEFRAMES = frozenset({"5m", "15m"})
 
 
 class CandleIngest:
+    """Takes each `candle.closed` event into the buffer and, when the engine is allowed to act on it, hands it to the
+    evaluators."""
+
     def __init__(
         self,
         buffer: CandleBuffer,
@@ -48,13 +54,27 @@ class CandleIngest:
         self.max_age = max_age
         self.evaluators: list[Evaluator] = []
         """Called, in order, with each candle that may be evaluated (the strategies, from TE3)."""
+        self.tracker: LatencyTracker | None = None
+        """Told what became of each 5-minute candle, for the latency record (TE8)."""
+        self.signals: Signals | None = None
+        """Told that the candle consumer handled something (`technical.worker`, worker `candles`)."""
+
+    def why_not(self, candle: Candle) -> str | None:
+        """None when the candle may be evaluated; otherwise the reason it may not: `inactive` (no warm-up since the
+        last outage, or the feed is down), `cold` (this stock's history is not warm) or `stale` (it closed more than
+        `max_age` ago: a backlog after a restart is not a signal)."""
+        if candle.timeframe != ENTRY_TIMEFRAME or not self.readiness.active:
+            return outcomes.INACTIVE
+        if candle.isin not in self.universe or not is_warm(self.buffer, candle.isin, self.spec):
+            return outcomes.COLD
+        if self.clock() - (candle.start_at + length(candle.timeframe)) > self.max_age:
+            return outcomes.STALE
+        return None
 
     def may_evaluate(self, candle: Candle) -> bool:
-        if candle.timeframe != ENTRY_TIMEFRAME or not self.readiness.active:
-            return False
-        if candle.isin not in self.universe or not is_warm(self.buffer, candle.isin, self.spec):
-            return False
-        return self.clock() - (candle.start_at + length(candle.timeframe)) <= self.max_age
+        """True only for a 5-minute candle of a universe stock, while the feed is healthy and warm-up is done, and the
+        candle closed less than `max_age` ago (a backlog after a restart is not a signal)."""
+        return candle.timeframe == ENTRY_TIMEFRAME and self.why_not(candle) is None
 
     async def handle(self, event: dict[str, Any], session: AsyncSession | None) -> None:
         """The EventConsumer handler for `tbo.market_feed.candle.closed.v1`. Idempotent: a redelivery is not stored
@@ -64,13 +84,35 @@ class CandleIngest:
             return
         if not self.buffer.add(candle):
             return
-        if self.may_evaluate(candle):
-            for evaluate in self.evaluators:
-                try:
-                    await evaluate(candle)
-                except Exception as exc:
-                    # One failing evaluator (an audit write, a strategy bug) must not stop the others, and must not
-                    # fail the event: it would be redelivered, found already stored, and skipped for everyone.
-                    log.error(
-                        "evaluator_failed", evaluator=getattr(evaluate, "__qualname__", "?"), error=type(exc).__name__
-                    )
+        if candle.timeframe != ENTRY_TIMEFRAME:
+            self._handled(True)
+            return
+        reason = self.why_not(candle)
+        if reason is not None:
+            self._observe(candle, reason)
+            self._handled(True)  # a candle the engine may not act on was still handled; the boundary record says why
+            return
+        failed = False
+        for evaluate in self.evaluators:
+            try:
+                await evaluate(candle)
+            except Exception as exc:
+                # One failing evaluator (an audit write, a strategy bug) must not stop the others, and must not
+                # fail the event: it would be redelivered, found already stored, and skipped for everyone.
+                failed = True
+                log.error(
+                    "evaluator_failed", evaluator=getattr(evaluate, "__qualname__", "?"), error=type(exc).__name__
+                )
+        self._observe(candle, outcomes.FAILED if failed else outcomes.EVALUATED)
+        self._handled(not failed)
+
+    def _handled(self, ok: bool) -> None:
+        if self.signals is not None:
+            self.signals.activity("technical.worker", ok, worker="candles")
+
+    def _observe(self, candle: Candle, outcome: str) -> None:
+        """Tell the latency record; for an evaluated candle, how long after its close the evaluators finished."""
+        if self.tracker is None:
+            return
+        seconds = (self.clock() - (candle.start_at + length(candle.timeframe))).total_seconds()
+        self.tracker.observe(candle.start_at, outcome, seconds if outcome == outcomes.EVALUATED else None)

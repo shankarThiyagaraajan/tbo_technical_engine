@@ -127,3 +127,12 @@ async def test_each_session_starts_with_a_fresh_warm_up_at_nine() -> None:
     rig.feed.calls.clear()
     await rig.supervisor.tick()
     assert rig.feed.calls == []  # only once a day
+
+
+async def test_every_warm_stock_is_primed_after_the_warm_up_and_before_the_engine_goes_active() -> None:
+    rig = Rig(IST_1000)
+    primed: list[tuple[str, bool]] = []
+    rig.supervisor.prime = lambda isin: primed.append((isin, rig.readiness.active))
+    await rig.supervisor.tick()
+    assert [i for i, _ in primed] == [ISIN_A, ISIN_B]
+    assert not any(active for _, active in primed) and rig.readiness.active

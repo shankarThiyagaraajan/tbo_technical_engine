@@ -9,7 +9,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
 from tbo_contracts.models.common import Timeframe
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.http_server import requires
 from tbo_platform_kit.problems import Problem
 from tbo_platform_kit.tokens import Claims
@@ -95,6 +95,7 @@ async def list_signals(
 
 @router.get("/v1/signals/{signal_id}")
 async def get_signal(request: Request, signal_id: str, caller: Claims = requires("technical:read")) -> dict[str, Any]:
+    """One stored candidate by its ULID; 404 `not_found` when there is none."""
     if not ULID.fullmatch(signal_id):
         raise Problem("validation_failed", "Not a signal ID.", errors=[{"field": "signal_id", "message": "not a ULID"}])
     async with request.app.state.sessions() as session:

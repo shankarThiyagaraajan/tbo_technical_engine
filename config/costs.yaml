@@ -1,0 +1,21 @@
+# Trading costs for the backtester: Indian cash equity, intraday (MIS), one discount broker.
+#
+# PLACEHOLDER: these are NOT the owner's figures. They are the published intraday schedule of a discount broker
+# (Zerodha, https://zerodha.com/charges/, read 2026-10-15; the page shows no "last updated" date), used so a backtest is
+# cost-aware today. The owner replaces them with the figures of the broker actually used, and sets `status: confirmed`.
+# While `status` is `placeholder` every backtest result says so (`costs.status`).
+#
+# All rates are percent of turnover (price x quantity) unless the name says otherwise. Strings, not floats: they are
+# read as Decimal, so 0.03 is exactly 0.03.
+schedule_version: "placeholder-2026-10-15"
+status: placeholder
+source: "Zerodha equity intraday charges, zerodha.com/charges, read 2026-10-15"
+
+brokerage_pct: "0.03"          # per executed order ...
+brokerage_cap: "20"            # ... or this many rupees, whichever is lower
+stt_sell_pct: "0.025"          # securities transaction tax, sell side only
+exchange_txn_pct: "0.00307"    # NSE transaction charge (BSE differs; all backtests assume NSE)
+sebi_per_crore: "10"           # rupees per crore of turnover
+stamp_buy_pct: "0.003"         # stamp duty, buy side only
+ipft_per_crore: "0.01"         # NSE investor protection fund, rupees per crore (the page's figure; negligible)
+gst_pct: "18"                  # on brokerage + SEBI + exchange transaction charge (+ IPFT)

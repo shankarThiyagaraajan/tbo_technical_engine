@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.schemas.candle import Candle
 
@@ -25,6 +25,8 @@ SESSION_OPEN_TOD = 9 * 60 + 15
 
 
 class Bar(NamedTuple):
+    """One closed candle as scalars, the unit the streaming indicators consume."""
+
     ts: int
     open: float
     high: float
@@ -36,11 +38,15 @@ class Bar(NamedTuple):
 
 
 def session_and_tod(start: datetime) -> tuple[int, int]:
+    """The IST trading date (as an ordinal) and minutes after midnight IST of a candle start: `04:00Z` is
+    09:30 IST, so `(date ordinal, 570)`. Session logic (VWAP reset, opening range) works on these, never on
+    timestamps."""
     local = start.astimezone(IST)
     return local.date().toordinal(), local.hour * 60 + local.minute
 
 
 def bar_of(candle: Candle) -> Bar:
+    """A `Candle` (Decimal prices) as a float `Bar` with its session and time of day."""
     session, tod = session_and_tod(candle.start_at)
     return Bar(
         ts=int(candle.start_at.timestamp()),
@@ -56,6 +62,8 @@ def bar_of(candle: Candle) -> Bar:
 
 @dataclass(frozen=True)
 class Bars:
+    """The same candles as parallel NumPy arrays: the unit the batch indicators consume."""
+
     ts: I64
     open: F64
     high: F64
@@ -76,6 +84,7 @@ class Bars:
 
     @classmethod
     def from_bars(cls, bars: Sequence[Bar]) -> Bars:
+        """Stack scalar bars into arrays (the inverse of `row`)."""
         return cls(
             ts=np.array([b.ts for b in bars], dtype=np.int64),
             open=np.array([b.open for b in bars], dtype=np.float64),
@@ -88,6 +97,7 @@ class Bars:
         )
 
     def row(self, i: int) -> Bar:
+        """Bar `i` as a scalar `Bar`, for feeding a streaming indicator."""
         return Bar(
             int(self.ts[i]),
             float(self.open[i]),

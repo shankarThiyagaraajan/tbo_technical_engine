@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 
 import numpy as np
@@ -40,14 +41,14 @@ def random_walk(days: int = 250, seed: int = 7, start: date = date(2025, 10, 1),
             rows.append((ts, round(o, 2), round(h, 2), round(low, 2), round(c, 2), float(v)))
             last = round(c, 2)
     bars = []
-    for ts, o, h, low, c, v in rows:
-        s, tod = session_and_tod(datetime.fromtimestamp(ts, UTC))
-        bars.append(Bar(ts, o, h, low, c, v, s, tod))
+    for epoch, open_, high, low_, close, volume in rows:
+        s, tod = session_and_tod(datetime.fromtimestamp(epoch, UTC))
+        bars.append(Bar(epoch, open_, high, low_, close, volume, s, tod))
     return Bars.from_bars(bars)
 
 
 def from_ohlcv(
-    rows: list[tuple[float, float, float, float, float]], per_session: int = 75, first: date = date(2026, 3, 2)
+    rows: Sequence[tuple[float, float, float, float, float]], per_session: int = 75, first: date = date(2026, 3, 2)
 ) -> Bars:
     """Bars from explicit (open, high, low, close, volume) rows, `per_session` bars to a session starting 09:15 IST."""
     days = sessions(first, max(1, -(-len(rows) // per_session)))

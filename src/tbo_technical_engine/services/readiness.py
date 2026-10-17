@@ -19,6 +19,9 @@ log = get_logger(__name__)
 
 
 class Readiness:
+    """Tracks the two conditions for producing candidates: a healthy feed and a warm-up that finished after the last
+    unhealthy status."""
+
     def __init__(self) -> None:
         self.feed_state = "connecting"
         self.needs_warmup = True
@@ -28,10 +31,12 @@ class Readiness:
 
     @property
     def feed_healthy(self) -> bool:
+        """True only for the feed state `healthy`; `connecting` (before the first status) is not healthy."""
         return self.feed_state == "healthy"
 
     @property
     def active(self) -> bool:
+        """True when candidates may be produced."""
         return self.feed_healthy and not self.needs_warmup
 
     @property
@@ -40,6 +45,7 @@ class Readiness:
         return "ok" if self.active else "degraded"
 
     def on_feed_status(self, status: FeedStatus) -> None:
+        """Apply a `feed.status` event: anything but healthy suspends candidates until a fresh warm-up."""
         if status.state != "healthy":
             # A hole may have opened in the series: it is only trusted again after a fresh warm-up.
             self.needs_warmup = True

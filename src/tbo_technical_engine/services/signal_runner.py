@@ -12,6 +12,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.logging import get_logger
+from tbo_signals import Signals
 
 from tbo_technical_engine import outbox
 from tbo_technical_engine.api.shapes import candidate_dict
@@ -26,6 +27,9 @@ SIGNAL_SCHEMA = "https://tbo.internal/schemas/technical/signal_candidate.v1.json
 
 
 class SignalRunner:
+    """Evaluates a candle, stores the candidates and queues their events in one transaction, then starts the cooldowns.
+    The cooldown moves only after the write, so a failed write can be retried by redelivery."""
+
     def __init__(
         self,
         evaluator: StrategyEvaluator,
@@ -39,8 +43,11 @@ class SignalRunner:
         self.publisher = publisher
         self.cooldowns = cooldowns
         self.clock = clock
+        self.signals: Signals | None = None
+        """Counts stored candidates and published events (`technical.signal_candidates`, `technical.signal_events`)."""
 
     async def __call__(self, candle: Candle) -> None:
+        """Evaluate `candle`; no-op when no strategy fired."""
         await self.cooldowns.load(candle.isin, self.evaluator.fired)
         now = self.clock()
         candidates = self.evaluator.evaluate(candle, now)
@@ -60,4 +67,6 @@ class SignalRunner:
             await self.cooldowns.mark(c)
             log.info("signal_candidate", strategy=c.strategy, side=c.side, isin=c.isin, strength=c.strength)
         if stored:
-            await outbox.flush_after_commit(self.sessions, self.publisher)
+            if self.signals is not None:
+                self.signals.emit("technical.signal_candidates", stored)
+            await outbox.flush_after_commit(self.sessions, self.publisher, self.signals)

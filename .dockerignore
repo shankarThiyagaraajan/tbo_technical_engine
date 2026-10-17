@@ -3,6 +3,7 @@
 !uv.lock
 !src/
 !contract/
+!config/
 !migrations/
 !alembic.ini
 **/__pycache__

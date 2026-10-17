@@ -16,7 +16,7 @@ from tests.support import ISIN_A, session_start
 
 DAY = date(2026, 10, 15)
 FIVE = default_suites()["5m"].outputs
-BLANK = {name: math.nan for name in FIVE}
+BLANK = dict.fromkeys(FIVE, math.nan)
 PIVOT_MIRROR = {
     "pivot_s3": "pivot_r3",
     "pivot_s2": "pivot_r2",
@@ -32,7 +32,7 @@ PRICE_KEYS = {"ema_9", "ema_21", "vwap", "supertrend_10_3", "or_mid"}
 SIGN_KEYS = {"supertrend_dir_10_3"}
 MIDDLE = 200.0
 
-PARAMS = {
+PARAMS: dict[str, str | int | bool] = {
     "entry_zone_atr": "0.1",
     "adx_min": "20",
     "swing_bars": 5,

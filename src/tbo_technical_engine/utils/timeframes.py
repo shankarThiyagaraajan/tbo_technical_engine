@@ -9,6 +9,7 @@ MINUTES = {"1m": 1, "5m": 5, "15m": 15, "60m": 60}
 
 
 def length(timeframe: str) -> timedelta:
+    """How long one candle of `timeframe` lasts; KeyError for a timeframe the service does not know."""
     if timeframe == "1d":
         return timedelta(days=1)
     if timeframe == "1w":
