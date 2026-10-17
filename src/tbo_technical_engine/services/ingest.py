@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from tbo_platform_kit.logging import get_logger
+from tbo_signals import Signals
 
 from tbo_technical_engine.config import latency as outcomes
 from tbo_technical_engine.schemas.candle import Candle
@@ -55,6 +56,8 @@ class CandleIngest:
         """Called, in order, with each candle that may be evaluated (the strategies, from TE3)."""
         self.tracker: LatencyTracker | None = None
         """Told what became of each 5-minute candle, for the latency record (TE8)."""
+        self.signals: Signals | None = None
+        """Told that the candle consumer handled something (`technical.worker`, worker `candles`)."""
 
     def why_not(self, candle: Candle) -> str | None:
         """None when the candle may be evaluated; otherwise the reason it may not: `inactive` (no warm-up since the
@@ -82,10 +85,12 @@ class CandleIngest:
         if not self.buffer.add(candle):
             return
         if candle.timeframe != ENTRY_TIMEFRAME:
+            self._handled(True)
             return
         reason = self.why_not(candle)
         if reason is not None:
             self._observe(candle, reason)
+            self._handled(True)  # a candle the engine may not act on was still handled; the boundary record says why
             return
         failed = False
         for evaluate in self.evaluators:
@@ -99,6 +104,11 @@ class CandleIngest:
                     "evaluator_failed", evaluator=getattr(evaluate, "__qualname__", "?"), error=type(exc).__name__
                 )
         self._observe(candle, outcomes.FAILED if failed else outcomes.EVALUATED)
+        self._handled(not failed)
+
+    def _handled(self, ok: bool) -> None:
+        if self.signals is not None:
+            self.signals.activity("technical.worker", ok, worker="candles")
 
     def _observe(self, candle: Candle, outcome: str) -> None:
         """Tell the latency record; for an evaluated candle, how long after its close the evaluators finished."""

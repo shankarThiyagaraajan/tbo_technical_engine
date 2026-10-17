@@ -27,6 +27,7 @@ from tbo_platform_kit.calendar import IST, TradingCalendar
 from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.http_client import UpstreamUnavailable
 from tbo_platform_kit.logging import get_logger
+from tbo_signals import Signals
 
 from tbo_technical_engine import outbox
 from tbo_technical_engine.clients.fundamental import FundamentalClient
@@ -106,6 +107,8 @@ class SnapshotService:
         self.calendar = calendar
         self.params = params
         self.clock = clock
+        self.signals: Signals | None = None
+        """Counts published events (`technical.signal_events`)."""
 
     async def universe(self, today: date) -> UniverseSnapshot | None:
         """Today's universe, or the previous session's when today's is not published yet (08:00 is before 08:20)."""
@@ -139,6 +142,20 @@ class SnapshotService:
         return Loaded(measured, adjusted, liquidity.turnover(raw.close, raw.volume, p.liquidity.turnover_days))
 
     async def run(self, kind: Kind, today: date) -> Summary:
+        """One snapshot pass; a run that did work tells the signals (`technical.swing_snapshot`, and at level full a
+        `swing_snapshot_finished` event with the number of new snapshots). A skipped day tells nothing."""
+        try:
+            summary = await self._run(kind, today)
+        except Exception:
+            if self.signals is not None:
+                self.signals.activity("technical.swing_snapshot", False, run=kind)
+            raise
+        if self.signals is not None and summary.skipped is None:
+            self.signals.activity("technical.swing_snapshot", True, run=kind)
+            self.signals.event("technical.swing_snapshot_finished", summary.snapshots_new, run=kind)
+        return summary
+
+    async def _run(self, kind: Kind, today: date) -> Summary:
         started = clock_time.monotonic()
         summary = Summary(kind)
         try:
@@ -188,7 +205,7 @@ class SnapshotService:
                     await self._announce(
                         session, SETUP_EVENT, SETUP_SCHEMA, setup.isin, setup_store.to_dict(setup), now
                     )
-        await outbox.flush_after_commit(self.sessions, self.publisher)
+        await outbox.flush_after_commit(self.sessions, self.publisher, self.signals)
         summary.seconds = round(clock_time.monotonic() - started, 1)
         log.info(
             "swing_run_done",

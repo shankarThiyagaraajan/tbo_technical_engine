@@ -10,6 +10,8 @@ import httpx
 from tbo_platform_kit.contract import route_mismatches, served_differences
 from tbo_platform_kit.events import EventPublisher
 
+from tbo_technical_engine.services.platform_signals import MANIFEST_PATH
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -38,7 +40,11 @@ async def test_served_openapi_is_the_released_contract(client: httpx.AsyncClient
 
 def test_routes_are_exactly_the_contract(app: Any) -> None:
     doc = json.loads((ROOT / "contract" / "openapi.json").read_text())
-    assert route_mismatches(app, doc) == []
+    # The signals manifest route is not in the contract yet: the signals contract (tbo_contracts 1.4.0) defines the
+    # manifest shape but no operation, and /v1/signals (its default path) is this service's trade-candidate list. Drop
+    # this allowance when tbo_contracts adds the operation (docs/PROGRESS.md, "Signals").
+    pending = {f"not in the contract: GET {MANIFEST_PATH}"}
+    assert [m for m in route_mismatches(app, doc) if m not in pending] == []
 
 
 async def test_unknown_route_is_a_problem(client: httpx.AsyncClient) -> None:

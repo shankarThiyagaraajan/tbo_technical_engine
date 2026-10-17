@@ -1,0 +1,88 @@
+# What this service says about itself, by id (tbo_signals). Add, remove or change a signal here and nowhere else.
+# The stage names are the stages the dashboard board draws for this service (tbo_dashboard topology.ts).
+# Levels: TBO_TECHNICAL_SIGNALS=off|metrics|full. Events (kind event) are written only at full.
+# Not alerted yet: the workers sleep outside the session, so "stale" needs a session-hours rule (platform).
+service: technical
+signals:
+  - id: technical.candles_waiting
+    kind: gauge
+    unit: items
+    stage: candles
+    description: Closed candles delivered to the signal worker's group but not yet handled (stream lag plus pending).
+    upstream: [market_feed]
+    downstream: [technical]
+
+  - id: technical.boundaries_evaluated
+    kind: count
+    unit: boundaries
+    stage: boundaries
+    description: Five-minute boundaries whose candles were all evaluated (none missed, feed healthy).
+    upstream: [market_feed]
+
+  - id: technical.boundaries_missed
+    kind: count
+    unit: boundaries
+    stage: missed
+    description: Boundaries with at least one evaluation missed (stale, cold, inactive, failed or absent), feed healthy.
+    upstream: [market_feed]
+
+  - id: technical.signal_candidates
+    kind: count
+    unit: candidates
+    stage: signals
+    description: Trade candidates stored by the strategies.
+    downstream: [decision]
+
+  - id: technical.outbox_waiting
+    kind: gauge
+    unit: items
+    stage: outbox
+    description: Events written but not yet published (not counting rows left behind after too many attempts).
+
+  - id: technical.signal_events
+    kind: count
+    unit: events
+    stage: published
+    description: Events published to Redis Streams for other services.
+    downstream: [decision, fundamental]
+
+  - id: technical.worker
+    kind: activity
+    unit: seconds
+    description: When each part of the signal worker last handled something, or last failed.
+    labels:
+      worker: {enum: [candles, feed, universe, supervisor]}
+    upstream: [market_feed, fundamental]
+
+  - id: technical.swing_snapshot
+    kind: activity
+    unit: seconds
+    description: When the daily (close) and morning swing snapshot jobs last finished, or last failed.
+    labels:
+      run: {enum: [close, morning]}
+    upstream: [market_feed, fundamental]
+    downstream: [decision]
+
+  - id: technical.boundary_missed
+    kind: event
+    unit: boundaries
+    level: full
+    description: A boundary closed with evaluations missed; the value is how many stocks were missed.
+    upstream: [market_feed]
+
+  - id: technical.swing_snapshot_finished
+    kind: event
+    unit: stocks
+    level: full
+    description: A swing snapshot run finished; the value is how many snapshots were new.
+    labels:
+      run: {enum: [close, morning]}
+    downstream: [decision]
+
+  - id: technical.backtest_finished
+    kind: event
+    unit: backtests
+    level: full
+    description: A backtest ended.
+    labels:
+      status: {enum: [succeeded, failed]}

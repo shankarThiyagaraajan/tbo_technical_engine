@@ -15,11 +15,12 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tbo_contracts import validate_event
 from tbo_platform_kit.events import EventPublisher, stream_of
 from tbo_platform_kit.logging import get_logger
+from tbo_signals import Signals
 
 from tbo_technical_engine.store.tables import outbox
 
@@ -43,11 +44,14 @@ async def add(session: AsyncSession, event: dict[str, Any]) -> None:
     )
 
 
-async def flush(sessions: async_sessionmaker[AsyncSession], publisher: EventPublisher) -> int:
+async def flush(
+    sessions: async_sessionmaker[AsyncSession], publisher: EventPublisher, signals: Signals | None = None
+) -> int:
     """Publish unpublished events, oldest first; returns how many. Safe to run from several processes.
 
     A row whose publish fails is marked (attempts, last_error) and skipped; the batch goes on. Rows at MAX_ATTEMPTS
     are left behind with `dead_at` set and are not retried by this sweep (clear `dead_at` and `attempts` to retry).
+    Each published row counts as `technical.signal_events` when `signals` is given.
     """
     published = 0
     while True:
@@ -82,17 +86,30 @@ async def flush(sessions: async_sessionmaker[AsyncSession], publisher: EventPubl
                     update(outbox).where(outbox.c.event_id == row.event_id).values(published_at=datetime.now(UTC))
                 )
                 published += 1
+                if signals is not None:
+                    signals.emit("technical.signal_events", 1)
         if len(rows) < BATCH:
             if published:
                 log.info("outbox_flushed", published=published)
             return published
 
 
-async def flush_after_commit(sessions: async_sessionmaker[AsyncSession], publisher: EventPublisher) -> None:
+async def waiting(sessions: async_sessionmaker[AsyncSession]) -> int:
+    """Rows still to publish (not counting the ones left behind): the board's "outbox waiting"."""
+    async with sessions() as session:
+        count = await session.scalar(
+            select(func.count()).select_from(outbox).where(outbox.c.published_at.is_(None), outbox.c.dead_at.is_(None))
+        )
+    return int(count or 0)
+
+
+async def flush_after_commit(
+    sessions: async_sessionmaker[AsyncSession], publisher: EventPublisher, signals: Signals | None = None
+) -> None:
     """The request-path flush, right after a change is committed: best effort. The change is already durable and
     the sweep publishes the row within 30 s whatever happens here, so a Redis blip must not turn a successful
     request into a 500."""
     try:
-        await flush(sessions, publisher)
+        await flush(sessions, publisher, signals)
     except Exception as exc:  # the sweep is the guarantee; this is only the fast path
         log.warning("outbox_flush_deferred", error=type(exc).__name__)

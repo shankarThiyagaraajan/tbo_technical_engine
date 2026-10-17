@@ -5,20 +5,25 @@ The kit's holiday file ships empty (it is filled from NSE's circular), so tests 
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterable
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import httpx
 from tbo_platform_kit.calendar import IST, TradingCalendar
 from tbo_platform_kit.http_client import ServiceClient, StaticTokenProvider
+from tbo_signals import Signals, load_manifest
+from tbo_signals.config.constants import Level
 
 from tbo_technical_engine.clients import fundamental, market_feed
 from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.utils.timefmt import z
 from tbo_technical_engine.utils.timeframes import length
 
+ROOT = Path(__file__).resolve().parents[1]
 ISIN_A = "INE002A01018"
 ISIN_B = "INE040A01034"
 HOLIDAYS = {
@@ -174,3 +179,30 @@ def fundamental_client(handler: Callable[[httpx.Request], httpx.Response]) -> fu
     return fundamental.FundamentalClient(
         make_client(fundamental.AUDIENCE, fundamental.SCOPES, httpx.MockTransport(handler))
     )
+
+
+class SpySink:
+    """Stands in for the signals stream writer: keeps every JSON text it is given."""
+
+    def __init__(self) -> None:
+        self.on_drop: Callable[[str], None] | None = None
+        self.written: list[dict[str, Any]] = []
+
+    def write(self, payload: str) -> None:
+        self.written.append(json.loads(payload))
+
+    def ids(self) -> list[str]:
+        """The signal ids of the events written so far, in order."""
+        return [w["signal_id"] for w in self.written if "signal_id" in w]
+
+
+def spy_signals(level: Level = Level.FULL) -> tuple[Signals, SpySink]:
+    """The shipped `config/signals.yaml` at `level`, with its own registry and a sink that remembers what it gets."""
+    sink = SpySink()
+    signals = Signals(load_manifest(ROOT / "config" / "signals.yaml"), mode="paper", level=level, sink=sink)
+    return signals, sink
+
+
+def sample(signals: Signals, name: str, **labels: str) -> float | None:
+    """The value of one Prometheus sample in the signals' registry (None when it does not exist)."""
+    return signals.registry.get_sample_value(name, labels)
