@@ -189,7 +189,7 @@ class SpySink:
         self.on_drop: Callable[[str], None] | None = None
         self.written: list[dict[str, Any]] = []
 
-    def write(self, payload: str) -> None:
+    def write(self, payload: str, kind: str = "signal") -> None:
         self.written.append(json.loads(payload))
 
     def ids(self) -> list[str]:
