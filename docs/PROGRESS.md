@@ -191,4 +191,8 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 
 ## Stock profile check (stage V1, 2026-10-18)
 
-read-only, no code change. The fundamental engine is read through `GET /v1/universe` and `GET /v1/gate`, both unchanged by contracts 1.14.x. The technical snapshot gains an optional `return_12m_pct` in the contract; it stays empty until stage T1 fills it (waits for the owner's yes), and readers of the snapshot ignore unknown or null fields. Nothing to build for V1.
+read-only, no code change. The fundamental engine is read through `GET /v1/universe` and `GET /v1/gate`, both unchanged by contracts 1.14.x. The technical snapshot gains an optional `return_12m_pct` in the contract (filled by stage T1, below). Nothing to build for V1.
+
+## Stock profile T1: 12-month return (2026-10-18)
+
+The daily snapshot carries `return_12m_pct`: the last close against the close 250 sessions earlier, from the same adjusted daily candles as the 20 and 60 day returns (`swing/analysis.return_12m`). With 250 sessions or fewer it is null, never 0 (a flat year is a real 0.00). The history read (400 calendar days, about 275 sessions) is enough. The contract pin is raised to 1.14.3 (`46d2aec`) and `contract/openapi.json` is re-vendored. Stored snapshots change their content hash once, so the next daily run re-announces them with the new field. Feeds the stock profile's peer comparison.

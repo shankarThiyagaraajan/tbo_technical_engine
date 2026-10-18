@@ -3252,6 +3252,17 @@
           },
           "computed_at": {
             "$ref": "#/components/schemas/Timestamp"
+          },
+          "return_12m_pct": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Decimal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The 12-month return in percent from TBO's own daily candles (last close against the close 250 sessions earlier). Null, never zero, when fewer than 250 daily candles exist. Feeds the stock profile's peer comparison."
           }
         },
         "examples": [
@@ -3283,7 +3294,8 @@
             "is_squeeze": false,
             "avg_turnover_20d": "8420000000.00",
             "spread_est_pct": "0.03",
-            "computed_at": "2026-10-14T10:30:00Z"
+            "computed_at": "2026-10-14T10:30:00Z",
+            "return_12m_pct": "18.40"
           }
         ]
       },

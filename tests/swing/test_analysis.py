@@ -42,6 +42,28 @@ def test_returns_are_close_over_close_n_sessions_back() -> None:
     assert round(measured.return_60d, 6) == 100.0  # 100 / 50 - 1
 
 
+def test_the_12_month_return_is_close_over_the_close_250_sessions_back() -> None:
+    close = [100.0] * 260
+    close[-251], close[-1] = 80.0, 100.0
+    measured = analysis.measure(ISIN, bars_from(close), PARAMS)
+    assert measured is not None and measured.return_12m is not None
+    assert round(measured.return_12m, 6) == 25.0  # 100 / 80 - 1
+    snapshot = analysis.snapshot(measured, 50, 1e8, "2026-10-15T10:30:00Z")
+    assert snapshot.return_12m_pct == "25.00"
+    validate("technical/technical_snapshot.v1.json", snapshot.model_dump(mode="json"))
+
+
+def test_the_12_month_return_is_null_not_zero_with_under_251_sessions() -> None:
+    assert analysis.return_12m([100.0] * 250) is None
+    assert analysis.return_12m([100.0] * 251) == 0.0  # a flat year is a real zero
+    measured = analysis.measure(ISIN, bars_from(wave(249, 100.0, 0.5)), PARAMS)
+    assert measured is not None and measured.return_12m is None
+    snapshot = analysis.snapshot(measured, 50, 1e8, "2026-10-15T10:30:00Z")
+    assert snapshot.return_12m_pct is None
+    validate("technical/technical_snapshot.v1.json", snapshot.model_dump(mode="json"))
+    assert analysis.return_12m([0.0] * 251) is None  # no base to divide by
+
+
 def test_a_stock_with_too_few_sessions_has_no_snapshot() -> None:
     assert analysis.measure(ISIN, bars_from(wave(PARAMS.min_bars - 1, 100.0, 0.5)), PARAMS) is None
     assert analysis.measure(ISIN, bars_from(wave(PARAMS.min_bars, 100.0, 0.5)), PARAMS) is not None

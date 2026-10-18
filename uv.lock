@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.12"
 
 [manifest]
-overrides = [{ name = "tbo-contracts", git = "https://github.com/shankarThiyagaraajan/tbo_contracts?rev=39085e3eab07e30df6737a6a5ab7d6a1016827e4" }]
+overrides = [{ name = "tbo-contracts", git = "https://github.com/shankarThiyagaraajan/tbo_contracts?rev=46d2aec094090e727cb1275f99e38d7a4769951c" }]
 
 [[package]]
 name = "alembic"
@@ -3342,8 +3342,8 @@ wheels = [
 
 [[package]]
 name = "tbo-contracts"
-version = "1.10.0"
-source = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts?rev=39085e3eab07e30df6737a6a5ab7d6a1016827e4#39085e3eab07e30df6737a6a5ab7d6a1016827e4" }
+version = "1.14.3"
+source = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts?rev=46d2aec094090e727cb1275f99e38d7a4769951c#46d2aec094090e727cb1275f99e38d7a4769951c" }
 dependencies = [
     { name = "jsonschema" },
     { name = "pydantic" },
@@ -3430,7 +3430,7 @@ requires-dist = [
     { name = "plotly", specifier = "<6" },
     { name = "polars", specifier = "~=1.44.0" },
     { name = "pyyaml", specifier = ">=6,<7" },
-    { name = "tbo-contracts", git = "https://github.com/shankarThiyagaraajan/tbo_contracts?rev=39085e3eab07e30df6737a6a5ab7d6a1016827e4" },
+    { name = "tbo-contracts", git = "https://github.com/shankarThiyagaraajan/tbo_contracts?rev=46d2aec094090e727cb1275f99e38d7a4769951c" },
     { name = "tbo-platform-kit", extras = ["sentry"], git = "https://github.com/shankarThiyagaraajan/tbo_platform?subdirectory=packages%2Ftbo_platform_kit&rev=4e92fc0739500379c9cad8334ee09391c8ed8e61" },
     { name = "tbo-signals", git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit?subdirectory=packages%2Ftbo_signals&rev=28bb6390ec010024f71c5e99c127236c1d0a3a1e" },
     { name = "vectorbt", specifier = ">=0.28,<0.29" },

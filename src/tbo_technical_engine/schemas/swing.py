@@ -198,6 +198,7 @@ class Snapshot(BaseModel):
     avg_turnover_20d: str
     spread_est_pct: str | None
     computed_at: str
+    return_12m_pct: str | None = None
 
 
 class Setup(BaseModel):
