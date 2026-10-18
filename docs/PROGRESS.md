@@ -188,3 +188,7 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   ruff, ruff format and mypy. Found and fixed: 45 mypy errors in tests (generics, unused ignores, loose dict types), 9
   packages without a docstring, three comprehension nits. pip-audit: pytest 8.4.2 (PYSEC-2026-1845, dev-only) ignored
   with a reason because the fix needs pytest 9 and pytest-asyncio 1.x. Bandit: B101 skipped (as ruff S101), B104 marked.
+
+## Stock profile check (stage V1, 2026-10-18)
+
+read-only, no code change. The fundamental engine is read through `GET /v1/universe` and `GET /v1/gate`, both unchanged by contracts 1.14.x. The technical snapshot gains an optional `return_12m_pct` in the contract; it stays empty until stage T1 fills it (waits for the owner's yes), and readers of the snapshot ignore unknown or null fields. Nothing to build for V1.
