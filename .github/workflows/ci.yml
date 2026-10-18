@@ -2,11 +2,11 @@
 # PostgreSQL and Redis, Schemathesis, the contract check. The image build, Trivy scan and release are
 # off by default (the runner has no Docker).
 name: CI
-# Runs on the self-hosted runner pool (label tbo-ci); the image build is off until a tbo-docker runner exists.
+# Runs on the self-hosted runner pool (label tbo-ci), only for pushes to main and manual starts: a pull request or
+# another branch would run its own workflow file next to the live trade bot. Run `make check` locally before a push.
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
