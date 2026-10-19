@@ -98,6 +98,19 @@ async def test_universe_event_sets_the_universe_and_a_newer_one_drops_stocks(red
     assert parts["universe"].isins == {ISIN_A} and parts["buffer"].count(ISIN_B, "5m") == 0
 
 
+async def test_stocks_that_drop_out_of_the_universe_are_reported_for_the_rest_of_their_state(
+    redis: Any, parts: dict[str, Any]
+) -> None:
+    """9.13: indicator streams and cooldowns of a removed stock are dropped too, through the callback."""
+    dropped: list[frozenset[str]] = []
+    consumer = universe_consumer(redis, PROFILE, parts["universe"], parts["buffer"], "w1", on_dropped=dropped.append)
+    await send_universe(redis, 1, ISIN_A, ISIN_B)
+    await consumer.run_once(block_ms=10)
+    await send_universe(redis, 2, ISIN_A)
+    await consumer.run_once(block_ms=10)
+    assert dropped == [frozenset({ISIN_B})]
+
+
 async def test_feed_status_events_drive_readiness(redis: Any, parts: dict[str, Any]) -> None:
     consumer = feed_consumer(redis, PROFILE, parts["readiness"], "w1")
     await send_status(redis, "healthy")

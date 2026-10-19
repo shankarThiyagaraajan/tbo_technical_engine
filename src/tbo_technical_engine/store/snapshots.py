@@ -41,14 +41,29 @@ async def upsert(session: AsyncSession, snapshot: Snapshot, now: datetime) -> bo
     return (await session.execute(stmt)).first() is not None
 
 
+SERVING_MIN_SHARE = 0.8
+"""A session serves only when it holds at least this share of the fullest recent session's rows. A run that ended with
+a partial universe (the feed's daily candles were late) must not hide yesterday's complete snapshot (review 9.4)."""
+SERVING_LOOKBACK = 10
+
+
 async def serving(session: AsyncSession, trade_date: date | None) -> date | None:
-    """The session whose snapshot serves `trade_date`: the latest built strictly before it ("the snapshot built after
-    the previous session's close"), or the latest of all when no date is given. None when there is none."""
-    query = select(func.max(t.c.as_of_date))
+    """The session whose snapshot serves `trade_date`: the latest nearly complete one built strictly before it ("the
+    snapshot built after the previous session's close"), or the latest of all when no date is given. Nearly complete
+    means at least SERVING_MIN_SHARE of the most rows any of the last SERVING_LOOKBACK sessions has. None when there
+    is none."""
+    query = select(t.c.as_of_date, func.count().label("n")).group_by(t.c.as_of_date)
     if trade_date is not None:
         query = query.where(t.c.as_of_date < trade_date)
-    found: date | None = (await session.execute(query)).scalar_one()
-    return found
+    rows = (await session.execute(query.order_by(t.c.as_of_date.desc()).limit(SERVING_LOOKBACK))).all()
+    if not rows:
+        return None
+    fullest = max(r.n for r in rows)
+    for r in rows:  # newest first
+        if r.n >= SERVING_MIN_SHARE * fullest:
+            found: date = r.as_of_date
+            return found
+    return None  # pragma: no cover  (the fullest session always qualifies)
 
 
 async def get(session: AsyncSession, as_of: date, isin: str) -> dict[str, Any] | None:

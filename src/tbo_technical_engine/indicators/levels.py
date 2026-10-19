@@ -3,7 +3,8 @@
 Previous-session high, low and close are taken from the bars themselves (the session's highest high, lowest low and
 last close), so the same function serves every timeframe and needs no daily candles. They are valid from the first
 bar of the second session in the series. A session missing from the series is simply skipped: the "previous"
-session is the previous one present.
+session is the previous one present. So is a session that is not a regular one (see `is_regular`): the one-hour
+Muhurat evening has a range of a few rupees, and pivots built from it would be nonsense the next day (review 9.7).
 
 Formulas (H, L, C of the previous session; P = (H + L + C) / 3; range = H - L):
 
@@ -71,18 +72,32 @@ def cpr(h: float, low: float, c: float) -> dict[str, float]:
     }
 
 
+REGULAR_LAST_BAR_FROM_TOD = 15 * 60
+"""A regular session's last bar starts at or after 15:00 IST (a 5-minute session ends with the 15:25 bar)."""
+
+
+def is_regular(first_tod: int, last_tod: int) -> bool:
+    """True for a full session: it opens at 09:15 and runs to the close. A Muhurat or other special session, or one
+    that the data cut short, is not, and its range is not used for the next day's levels."""
+    return first_tod == SESSION_OPEN_TOD and last_tod >= REGULAR_LAST_BAR_FROM_TOD
+
+
 def previous_session_hlc(bars: Bars) -> tuple[F64, F64, F64]:
-    """For every bar, the high, low and close of the previous session (nan on the first session)."""
+    """For every bar, the high, low and close of the previous regular session (nan until one has ended)."""
     n = len(bars)
     ph, pl, pc = full(n), full(n), full(n)
     if n == 0:
         return ph, pl, pc
     starts = np.flatnonzero(np.r_[True, bars.session[1:] != bars.session[:-1]])
     ends = np.r_[starts[1:], n]
+    last: Hlc | None = None
     for idx in range(1, len(starts)):
         a, b = starts[idx - 1], ends[idx - 1]
-        h, low, c = float(bars.high[a:b].max()), float(bars.low[a:b].min()), float(bars.close[b - 1])
-        ph[starts[idx] : ends[idx]], pl[starts[idx] : ends[idx]], pc[starts[idx] : ends[idx]] = h, low, c
+        if is_regular(int(bars.tod[a]), int(bars.tod[b - 1])):
+            last = (float(bars.high[a:b].max()), float(bars.low[a:b].min()), float(bars.close[b - 1]))
+        if last is not None:
+            h, low, c = last
+            ph[starts[idx] : ends[idx]], pl[starts[idx] : ends[idx]], pc[starts[idx] : ends[idx]] = h, low, c
     return ph, pl, pc
 
 
@@ -126,17 +141,20 @@ class _LevelsStream:
         self.spec = spec
         self.session = -1
         self.cur_h = self.cur_l = self.cur_c = NAN
+        self.first_tod = self.last_tod = -1
         self.levels: dict[str, float] = dict.fromkeys(spec.names, NAN)
 
     def update(self, bar: Bar) -> dict[str, float]:
         if bar.session != self.session:
-            if self.session != -1:
+            if self.session != -1 and is_regular(self.first_tod, self.last_tod):
                 self.levels = type(self.spec).kind(self.cur_h, self.cur_l, self.cur_c)
             self.session = bar.session
             self.cur_h, self.cur_l = bar.high, bar.low
+            self.first_tod = bar.tod
         else:
             self.cur_h, self.cur_l = max(self.cur_h, bar.high), min(self.cur_l, bar.low)
         self.cur_c = bar.close
+        self.last_tod = bar.tod
         return dict(self.levels)
 
 

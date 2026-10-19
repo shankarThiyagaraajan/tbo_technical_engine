@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,6 +50,15 @@ async def create(
             created_at=now,
         )
     )
+
+
+SUBMIT_LOCK = 7_420_001
+"""Key of the transaction-scoped advisory lock that serialises the cap check and the insert of a new backtest."""
+
+
+async def lock_submissions(session: AsyncSession) -> None:
+    """Hold an advisory lock until the caller's transaction ends, so the concurrency cap cannot be raced."""
+    await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": SUBMIT_LOCK})
 
 
 async def active_count(session: AsyncSession) -> int:

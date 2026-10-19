@@ -7,6 +7,7 @@ history_days: 400          # calendar days of daily candles read per stock: abou
 turnover_lookback_days: 40 # calendar days of UNADJUSTED daily candles for the traded value (a split must not shrink it)
 min_bars: 61               # sessions a stock needs: the 60-day return needs 61 closes. Fewer: no snapshot for that stock.
 fetch_concurrency: 8       # stocks fetched at the same time
+max_stale_share: 0.2       # more stocks than this share without the day's candle (the feed's 15:45 reconcile is late): nothing is published; the job retries (review 9.4)
 max_failed_share: 0.2      # more stocks than this share failing to load: nothing is published (ranks would be skewed); the job retries
 
 trend:

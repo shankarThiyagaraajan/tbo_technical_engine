@@ -101,9 +101,10 @@ def universe_consumer(
     name: str,
     metrics: Metrics | None = None,
     signals: Signals | None = None,
+    on_dropped: Callable[[frozenset[str]], None] | None = None,
 ) -> EventConsumer:
     """Reads `universe.published` events: a newer universe replaces the stock list, and candles of stocks that dropped
-    out are forgotten."""
+    out are forgotten. `on_dropped` also drops the other per-stock state (indicator streams, cooldowns; review 9.13)."""
 
     async def handle(event: dict[str, Any], session: AsyncSession | None) -> None:
         data = event["data"]
@@ -112,7 +113,10 @@ def universe_consumer(
             trade_date=data["trade_date"], universe_version=data["universe_version"], isins=tuple(data["isins"])
         )
         if universe.offer(snapshot):
-            buffer.forget(before - universe.isins)
+            dropped = frozenset(before - universe.isins)
+            buffer.forget(dropped)
+            if on_dropped is not None and dropped:
+                on_dropped(dropped)
         if signals is not None:
             signals.activity("technical.worker", True, worker="universe")
 

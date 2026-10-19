@@ -1,0 +1,45 @@
+{
+  "description": "Fill-on-the-fill-candle vectors shared by tbo_paper_fills (kit finding 3.1) and the technical engine's backtest simulate.py (finding 9.2): both must give these answers. Rule: when the entry fills at the limit inside a candle (the open was not already better than the limit), the candle's favourable extreme (high for a buy, low for a sell) may have printed BEFORE the fill, so no target is credited on that candle and no gap-at-the-open exit is taken; only the stop is tested (stop_first). When the entry fills at the open, the candle is judged as before.",
+  "rules": {
+    "notional_per_trade": "100000", "slippage_bps": "0", "entry_wait_bars": 1,
+    "t1_fraction": "0.5", "stop_to_entry_after_t1": true, "square_off": "15:15"
+  },
+  "session": "bar index 0 = 09:15 IST on 2026-10-15, 5-minute bars; the signal candle is index 10, the candles below start at index 11",
+  "cases": [
+    {
+      "name": "buy fills at the limit on a candle that opened beyond both targets: nothing is credited",
+      "setup": {"side": "buy", "entry_low": "99.00", "entry_high": "100.00", "stop": "98.00", "target_1": "102.00", "target_2": "103.00"},
+      "candles": [["103.00", "103.00", "99.50", "100.00"]],
+      "expected": {"entry_price": "100.00", "quantity": 1000, "exit_reason": "end_of_data", "target_1_hit": false,
+                   "legs": [[1000, "100.00", "end_of_data"]]}
+    },
+    {
+      "name": "buy fills at the limit and the high (102.50) may have come first: T1 is not credited",
+      "setup": {"side": "buy", "entry_low": "99.00", "entry_high": "100.00", "stop": "98.00", "target_1": "102.00", "target_2": "103.00"},
+      "candles": [["101.00", "102.50", "100.00", "100.50"]],
+      "expected": {"entry_price": "100.00", "quantity": 1000, "exit_reason": "end_of_data", "target_1_hit": false,
+                   "legs": [[1000, "100.50", "end_of_data"]]}
+    },
+    {
+      "name": "buy fills at the limit and the same candle trades through the stop: still the stop",
+      "setup": {"side": "buy", "entry_low": "99.00", "entry_high": "100.00", "stop": "98.00", "target_1": "102.00", "target_2": "103.00"},
+      "candles": [["101.00", "102.50", "97.50", "98.00"]],
+      "expected": {"entry_price": "100.00", "quantity": 1000, "exit_reason": "stop", "target_1_hit": false,
+                   "legs": [[1000, "98.00", "stop"]]}
+    },
+    {
+      "name": "control: buy fills at the open, so the same high is credited as before",
+      "setup": {"side": "buy", "entry_low": "99.00", "entry_high": "100.00", "stop": "98.00", "target_1": "102.00", "target_2": "103.00"},
+      "candles": [["99.50", "102.50", "99.60", "102.00"]],
+      "expected": {"entry_price": "99.50", "quantity": 1005, "exit_reason": "end_of_data", "target_1_hit": true,
+                   "legs": [[502, "102.00", "target_1"], [503, "102.00", "end_of_data"]]}
+    },
+    {
+      "name": "sell mirror: fills at the limit on a candle that opened beyond both targets: nothing is credited",
+      "setup": {"side": "sell", "entry_low": "100.00", "entry_high": "101.00", "stop": "102.00", "target_1": "98.00", "target_2": "97.00"},
+      "candles": [["97.00", "100.50", "97.00", "100.00"]],
+      "expected": {"entry_price": "100.00", "quantity": 1000, "exit_reason": "end_of_data", "target_1_hit": false,
+                   "legs": [[1000, "100.00", "end_of_data"]]}
+    }
+  ]
+}

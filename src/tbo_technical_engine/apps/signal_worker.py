@@ -135,10 +135,17 @@ class SignalWorker:
         self.consumers = [
             candle_consumer(redis, profile, self.ingest, name, metrics),
             feed_consumer(redis, profile, self.readiness, name, metrics, signals),
-            universe_consumer(redis, profile, self.universe, self.buffer, name, metrics, signals),
+            universe_consumer(
+                redis, profile, self.universe, self.buffer, name, metrics, signals, on_dropped=self.drop_stocks
+            ),
         ]
         if self.live is not None and self.live.configured:
             self.consumers.append(calendar_consumer(redis, profile, self.live, name, metrics))
+
+    def drop_stocks(self, isins: frozenset[str]) -> None:
+        """Forget what the engine holds for stocks that left the universe: indicator streams and cooldowns (9.13)."""
+        self.engine.forget(isins)
+        self.evaluator.forget(isins)
 
     async def ensure_universe(self, today: date) -> None:
         """Read the universe over REST when the stream has not given us today's (a restart after 08:20)."""
@@ -151,7 +158,11 @@ class SignalWorker:
             log.warning("universe_unavailable", error=str(exc)[:200])
             return
         if fetched is not None:
-            self.universe.offer(fetched)
+            before = self.universe.isins
+            if self.universe.offer(fetched):
+                dropped = frozenset(before - self.universe.isins)
+                self.buffer.forget(dropped)
+                self.drop_stocks(dropped)
 
     async def report_signals(self, rows: list[BoundaryLatency]) -> None:
         """The supervisor's numbers for the board: boundaries that closed, the candle backlog, the outbox queue. A tick

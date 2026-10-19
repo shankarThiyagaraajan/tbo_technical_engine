@@ -15,6 +15,7 @@ from tbo_platform_kit.celery_app import create_celery, crontab_ist, every, queue
 from tbo_platform_kit.db import create_engine, session_factory
 from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.http_client import IssuerTokenProvider, ServiceClient
+from tbo_platform_kit.logging import get_logger
 
 from tbo_technical_engine import outbox
 from tbo_technical_engine.backtest.costs import load_costs
@@ -31,6 +32,7 @@ from tbo_technical_engine.store import backtests as backtest_store
 from tbo_technical_engine.store import indicators as indicator_store
 from tbo_technical_engine.store.research_cache import ResearchCache
 
+log = get_logger(__name__)
 settings = Settings()
 celery = create_celery(settings)
 OUTBOX = queue_name(SHORT_NAME, "outbox")
@@ -89,6 +91,11 @@ stay under the broker's 3600 s redelivery window, so a running job is never hand
 
 
 async def _run_backtest(backtest_id: str) -> str:
+    # A job that would run into the trading session (08:10 + 55 min reaches the 09:00 warm-up) does not start; the row
+    # stays queued and the sweep sends it again after the blackout (review 9.12).
+    if not settings.profile.research_allowed(now_utc() + timedelta(seconds=BACKTEST_SETTINGS.caps.max_runtime_seconds)):
+        log.info("backtest_deferred", backtest_id=backtest_id)
+        return "deferred"
     engine = create_engine(settings)
     funds_http = None
     rules: backtest_service.RulesLoader | None = None
@@ -112,6 +119,7 @@ async def _run_backtest(backtest_id: str) -> str:
             load_costs(settings.costs_file),
             ResearchCache(settings.research_cache_dir),
             rules,
+            research_allowed=settings.profile.research_allowed,
         )
         status = await runner.execute(backtest_id)
         if status in ("succeeded", "failed"):  # "missing" and "busy" are not an end

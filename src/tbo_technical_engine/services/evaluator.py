@@ -15,6 +15,7 @@ from datetime import datetime, time, timedelta
 from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.logging import get_logger
 
+from tbo_technical_engine.config.corporate_actions import MAX_OPENING_GAP
 from tbo_technical_engine.indicators.format import decimals
 from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.schemas.signal import Draft, SignalCandidate
@@ -27,6 +28,9 @@ from tbo_technical_engine.utils.ids import signal_id
 from tbo_technical_engine.utils.timeframes import length
 
 log = get_logger(__name__)
+LAST_BAR_FROM, LAST_BAR_UNTIL = time(15, 0), time(15, 30)
+"""A regular 5-minute session's last bar starts at 15:25, so a bar starting in this window closes a regular session. A
+Muhurat evening session (about 18:15 to 19:15) never has one."""
 IndexSide = Callable[[datetime], int | None]
 FiredKey = tuple[str, str, str]
 """(isin, strategy, side)."""
@@ -80,10 +84,14 @@ class StrategyEvaluator:
         for c in reversed(self.buffer.view(candle.isin, "5m")):
             if c.start_at >= day_start:
                 today.append(c)
-            else:
+            elif LAST_BAR_FROM <= c.start_at.astimezone(IST).time() < LAST_BAR_UNTIL:
+                # The last bar of a regular session. A special session (Muhurat) ends earlier in the day, so its
+                # bars are skipped and the previous regular session's close is the gap's base (9.7).
                 prev_close = float(c.close)
                 break
         today.reverse()
+        if prev_close and today and abs(float(today[0].open) / prev_close - 1) > MAX_OPENING_GAP:
+            return None  # a split or bonus: the previous session's levels are on another price scale (9.5)
         trend = self.engine.values_asof(candle.isin, "15m", candle.start_at)
         daily = self.engine.values(candle.isin, "1d")
         return Context(
@@ -127,6 +135,11 @@ class StrategyEvaluator:
                 # A strategy that fails (a bad parameter, a bug) is silent; the others still run.
                 log.error("strategy_failed", strategy=name, isin=candle.isin, error=type(exc).__name__)
         return found
+
+    def forget(self, isins: frozenset[str] | set[str]) -> None:
+        """Drop the cooldowns of stocks that left the universe, so the map does not grow with every stock ever seen."""
+        for key in [k for k in self.fired if k[0] in isins]:
+            del self.fired[key]
 
     def accept(self, candidate: SignalCandidate) -> None:
         """Start the cooldown of a candidate that was emitted."""

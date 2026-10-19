@@ -14,7 +14,6 @@ from collections.abc import Iterable
 from typing import Any
 
 from prometheus_client import CollectorRegistry, start_http_server
-from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
 from redis.exceptions import ResponseError
 from tbo_platform_kit.logging import get_logger
@@ -39,7 +38,7 @@ def build_signals(settings: Settings, registry: CollectorRegistry | None = None)
     level = resolve_level(manifest.service, mode)
     sink = None
     if level is not Level.OFF and settings.redis_url is not None:
-        sink = StreamSink(Redis.from_url(settings.redis_url.get_secret_value()), stream_name(mode))
+        sink = StreamSink.from_url(settings.redis_url.get_secret_value(), stream_name(mode))
     return Signals(manifest, mode=mode, level=level, registry=registry, sink=sink)
 
 

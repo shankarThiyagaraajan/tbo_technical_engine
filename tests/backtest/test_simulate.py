@@ -6,9 +6,13 @@ Candidate: buy, limit 100.20 (far edge of the zone), stop 99.00, T1 101.50, T2 1
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
+
+import pytest
 
 from tbo_technical_engine.backtest.costs import leg_charges
 from tbo_technical_engine.backtest.simulate import simulate
@@ -168,3 +172,54 @@ def test_an_order_does_not_live_over_the_night() -> None:
 
     next_day = bar(0, "100.00", "100.30", "99.90", "100.10", day=date(2026, 10, 16))
     assert run([next_day], candidate(index=74)) is None
+
+
+def test_a_limit_fill_credits_no_target_from_the_fill_candle() -> None:
+    """9.2: the candle opened above the limit and came back; its 102.60 high may have printed before the fill."""
+    after = [bar(11, "100.60", "102.60", "100.10", "102.00"), *flat(12, 13, "100.40")]
+    trade = run(after)
+    assert trade is not None and trade.entry_price == D("100.20")
+    assert trade.target_1_hit is False  # not +0.54 R booked on a high that predates the fill
+
+
+def test_a_limit_fill_candle_can_still_stop_the_trade_out() -> None:
+    trade = run([bar(11, "100.60", "102.60", "98.90", "99.50")])
+    assert trade is not None and trade.exit_reason == "stop"
+
+
+def test_a_better_open_fill_still_credits_the_fill_candle_target() -> None:
+    trade = run([bar(11, "100.00", "101.60", "99.90", "101.50"), *flat(12, 13, "101.50")])
+    assert trade is not None and trade.target_1_hit is True
+
+
+def _vector_cases() -> list[dict[str, Any]]:
+    return list(json.loads((Path(__file__).parent / "vectors" / "fills.json").read_text())["cases"])
+
+
+@pytest.mark.parametrize("case", _vector_cases(), ids=lambda c: str(c["name"])[:60])
+def test_the_shared_fill_vector_with_tbo_paper_fills(case: dict[str, Any]) -> None:
+    """9.2 / kit 3.1: tbo_paper_fills and this simulator must give the same answers on a fill candle. The file is the
+    kit's `test-vectors/fills.json`; keep the two copies equal."""
+    rules = json.loads((Path(__file__).parent / "vectors" / "fills.json").read_text())["rules"]
+    s, expected = case["setup"], case["expected"]
+    cand = candidate(
+        s["side"], low=s["entry_low"], high=s["entry_high"], stop=s["stop"], t1=s["target_1"], t2=s["target_2"]
+    )
+    after = [bar(11 + i, *row) for i, row in enumerate(case["candles"])]
+    trade = run(
+        after,
+        cand,
+        notional_per_trade=D(rules["notional_per_trade"]),
+        entry_wait_bars=rules["entry_wait_bars"],
+        t1_fraction=D(rules["t1_fraction"]),
+        stop_to_entry_after_t1=rules["stop_to_entry_after_t1"],
+        square_off=rules["square_off"],
+    )
+    assert trade is not None
+    assert trade.entry_price == D(expected["entry_price"])
+    assert trade.quantity == expected["quantity"]
+    assert trade.exit_reason == expected["exit_reason"]
+    assert trade.target_1_hit is expected["target_1_hit"]
+    d = 1 if s["side"] == "buy" else -1
+    gross = sum((D(price) - trade.entry_price) * d * qty for qty, price, _ in expected["legs"])
+    assert trade.gross_pnl == gross

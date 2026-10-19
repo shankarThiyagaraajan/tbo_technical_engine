@@ -216,3 +216,33 @@ async def test_the_daily_fetch_is_bounded_by_the_configured_concurrency(world: W
     assert len(daily_calls) == 12  # two reads (adjusted history, unadjusted traded value) per stock, one page each
     adjusted = [r for r in daily_calls if r.url.params.get("adjusted") == "true"]
     assert len(adjusted) == 6 and all(r.url.params["timeframe"] == "1d" for r in daily_calls)
+
+
+async def test_a_late_daily_candle_for_too_many_stocks_publishes_nothing_and_raises(
+    world: World, sessions: Any
+) -> None:
+    """9.4: the feed's 15:45 reconcile ran past 16:00. Ranks over the rest would mislead, so retry later."""
+    late = {isin(3), isin(4)}  # 2 of 6 is over the 20% limit
+    world.feed.data = [
+        c for c in world.feed.data if not (c.isin in late and c.start_at.date() >= DAY - timedelta(days=1))
+    ]
+    with pytest.raises(IncompleteRun):
+        await world.service().run("close", DAY)
+    assert await count(sessions, technical_snapshot) == 0 and await count(sessions, outbox) == 0
+
+
+async def test_a_missing_universe_tells_the_signals_it_failed(world: World, sessions: Any) -> None:
+    calls: list[tuple[str, bool]] = []
+
+    class Spy:
+        def activity(self, name: str, ok: bool, **_: Any) -> None:
+            calls.append((name, ok))
+
+        def event(self, *_: Any, **__: Any) -> None:
+            raise AssertionError("a skipped run announces nothing")
+
+    world.published = set()
+    service = world.service()
+    service.signals = Spy()  # type: ignore[assignment]
+    await service.run("close", DAY)
+    assert calls == [("technical.swing_snapshot", False)]

@@ -57,6 +57,12 @@ class BudgetExceeded(RuntimeError):
     pass
 
 
+class BlackoutReached(RuntimeError):
+    """The job was still running when the mode's research blackout (the trading session) began (review 9.12)."""
+
+    pass
+
+
 def load_settings(path: Path) -> BacktestSettings:
     """Read and validate the backtest settings file."""
     return BacktestSettings.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
@@ -96,6 +102,7 @@ async def submit(
 ) -> str:
     """Checks the caps, writes the queued row (inside the caller's transaction) and returns its ID."""
     check_request(body, strategies, settings)
+    await store.lock_submissions(session)  # two POSTs at once must not both see "one active" (review 9.12)
     if await store.active_count(session) >= settings.caps.max_concurrent_jobs:
         raise Problem(
             "rate_limited",
@@ -133,6 +140,7 @@ class BacktestRunner:
         rules: RulesLoader | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         monotonic: Callable[[], float] = time.monotonic,
+        research_allowed: Callable[[datetime], bool] | None = None,
     ) -> None:
         self.sessions = sessions
         self.strategies = strategies
@@ -142,6 +150,8 @@ class BacktestRunner:
         self.rules = rules
         self.clock = clock
         self.monotonic = monotonic
+        self.research_allowed = research_allowed
+        """The mode's blackout check; when set, a job still running at the blackout's start stops."""
 
     async def execute(self, backtest_id: str) -> str:
         """Run one queued backtest; returns the status it ended in (or `missing` / `busy`)."""
@@ -159,6 +169,9 @@ class BacktestRunner:
             outcome = await self._run(row, deadline)
         except BudgetExceeded:
             await self._fail(backtest_id, f"stopped after the {budget.total_seconds():.0f} s time budget")
+            return "failed"
+        except BlackoutReached:
+            await self._fail(backtest_id, "stopped when the trading session began; submit it again after 15:45 IST")
             return "failed"
         except Exception as exc:  # a failed job says why; it must never leave the row 'running'
             log.error("backtest_failed", backtest_id=backtest_id, error=type(exc).__name__)
@@ -194,6 +207,8 @@ class BacktestRunner:
         def tick() -> None:
             if self.monotonic() > deadline:
                 raise BudgetExceeded
+            if self.research_allowed is not None and not self.research_allowed(self.clock()):
+                raise BlackoutReached
 
         study = run_study(
             self.strategies,
@@ -214,7 +229,9 @@ class BacktestRunner:
         )
         result = study_result(study, self.settings, self.costs)
         evidence = None
-        if not overrides:
+        if not overrides and rules is not None:
+            # Only a gated run over the whole universe is evidence. A run on a few listed stocks has no point-in-time
+            # gate and would replace the broad result of the same strategy and version (review 9.10).
             evidence = build_evidence(
                 strategy=row.strategy,
                 params_version=row.params_version,
