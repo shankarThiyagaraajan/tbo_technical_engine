@@ -11,6 +11,9 @@ The fill and exit rules are the owner-visible assumptions of every backtest numb
 - A candle that touches both an adverse and a favourable level counts the adverse one first (`stop_first`). Once the
   position is open this is also assumed for the fill candle itself. The backtester has candles, not ticks, so it
   cannot know the order, and guessing the good one flatters every strategy.
+- When the order fills at the limit (the candle opened beyond it and came back), the candle's extreme on the favourable
+  side may have printed BEFORE the fill, so that candle can stop the trade out but credits no target; targets count
+  from the next candle (review 9.2). A fill at the open has the whole candle after it, so its targets count.
 - A fill at or beyond the stop (a gap through it) is no trade: the risk would be zero or negative.
 """
 
@@ -65,6 +68,7 @@ def simulate(  # noqa: C901  one candle-by-candle state machine (fill, stop, tar
 
     fill: Decimal | None = None
     fill_index = -1
+    filled_at_limit = False
     for i, c in enumerate(after[: execution.entry_wait_bars]):
         if c.start_at.astimezone(IST).date() != signal_day:
             break  # an order does not live over the night
@@ -74,7 +78,7 @@ def simulate(  # noqa: C901  one candle-by-candle state machine (fill, stop, tar
             fill, fill_index = c.open, i
             break
         if reached:
-            fill, fill_index = limit, i
+            fill, fill_index, filled_at_limit = limit, i, True
             break
     if fill is None:
         return None
@@ -99,7 +103,7 @@ def simulate(  # noqa: C901  one candle-by-candle state machine (fill, stop, tar
         legs.append(_Leg(qty, cents(at * (1 - d * slip))))
 
     done = False
-    for c in after[fill_index:]:
+    for position, c in enumerate(after[fill_index:]):
         local = c.start_at.astimezone(IST)
         if local.date() != signal_day:
             break  # the session ended without a square-off candle: close at the last close below
@@ -115,6 +119,8 @@ def simulate(  # noqa: C901  one candle-by-candle state machine (fill, stop, tar
             remaining, done = 0, True
             reason = "stop_at_entry" if stop_moved else "stop"
             break
+        if position == 0 and filled_at_limit:
+            continue  # its favourable extreme may predate the fill (9.2)
         reached_1 = (c.high >= target_1) if side == "buy" else (c.low <= target_1)
         if not t1_hit and reached_1:
             t1_hit = True

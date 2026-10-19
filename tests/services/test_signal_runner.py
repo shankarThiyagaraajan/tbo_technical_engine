@@ -86,19 +86,52 @@ async def test_the_same_candles_again_add_nothing(app: Any, settings: Any, redis
     assert await count(sessions, outbox) == queued
 
 
-async def test_a_failed_write_keeps_the_candle_retryable(app: Any, settings: Any, redis: Any, sessions: Any) -> None:
-    """If the transaction fails, nothing is stored and no cooldown starts, so the next evaluation can still emit it."""
+async def test_a_write_that_fails_once_is_retried_and_stored(
+    app: Any, settings: Any, redis: Any, sessions: Any
+) -> None:
+    """9.3: PostgreSQL drops for a moment mid-write; the runner retries the transaction itself, because a redelivered
+    event would be dropped as a duplicate by the buffer (the ingest acknowledges the event after one failure)."""
     buffer, runner, evaluator = build(app, settings, redis)
+    waits: list[float] = []
+
+    async def heal(delay: float) -> None:
+        waits.append(delay)
+        async with sessions() as session, session.begin():
+            await session.execute(text("ALTER TABLE technical.signal_candidate_x RENAME TO signal_candidate"))
+
+    runner.sleep = heal
+    async with sessions() as session, session.begin():
+        await session.execute(text("ALTER TABLE technical.signal_candidate RENAME TO signal_candidate_x"))
+    await play(buffer, runner)
+    assert waits == [0.25]  # one failed attempt, healed during the wait, stored on the second
+    assert await count(sessions, signal_candidate) > 0
+    assert evaluator.fired
+
+
+async def test_a_write_that_never_succeeds_raises_after_the_retries(
+    app: Any, settings: Any, redis: Any, sessions: Any
+) -> None:
+    """No cooldown starts when every attempt fails, and the error reaches the ingest, which logs and counts it."""
+    buffer, runner, evaluator = build(app, settings, redis)
+    waits: list[float] = []
+
+    async def nap(delay: float) -> None:
+        waits.append(delay)
+
+    runner.sleep = nap
     async with sessions() as session, session.begin():
         await session.execute(text("ALTER TABLE technical.signal_candidate RENAME TO signal_candidate_x"))
     try:
+        raised = False
         for candle in HISTORY.events(DAY):
             buffer.add(candle)
             if candle.timeframe == "5m":
                 try:
                     await runner(candle)
                 except Exception:
+                    raised = True
                     break
+        assert raised and waits == [0.25, 1.0, 2.0]
         assert evaluator.fired == {}
     finally:
         async with sessions() as session, session.begin():

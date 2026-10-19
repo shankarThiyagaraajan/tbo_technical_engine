@@ -160,3 +160,14 @@ async def test_the_scope_is_enforced(client: httpx.AsyncClient, keys: TestKeys) 
         assert (await client.get(path)).status_code == 401
         wrong = keys.bearer("tbo_platform", REPOSITORY, ["technical:research"])
         assert (await client.get(path, headers=wrong)).status_code == 403
+
+
+async def test_a_partial_latest_session_does_not_hide_the_last_complete_one(
+    client: httpx.AsyncClient, read: dict[str, str], stored: None, sessions: Any
+) -> None:
+    """9.4: a run with a late feed stored 1 of 4 snapshots for the 16th; the 15th keeps serving."""
+    d3 = date(2026, 10, 16)
+    async with sessions() as session, session.begin():
+        await snapshot_store.upsert(session, snap(ISINS[0], d3, 9), NOW)
+    items = (await client.get("/v1/snapshots", headers=read)).json()["items"]
+    assert len(items) == 4 and {i["as_of_date"] for i in items} == {"2026-10-15"}

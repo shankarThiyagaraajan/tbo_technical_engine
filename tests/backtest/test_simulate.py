@@ -168,3 +168,21 @@ def test_an_order_does_not_live_over_the_night() -> None:
 
     next_day = bar(0, "100.00", "100.30", "99.90", "100.10", day=date(2026, 10, 16))
     assert run([next_day], candidate(index=74)) is None
+
+
+def test_a_limit_fill_credits_no_target_from_the_fill_candle() -> None:
+    """9.2: the candle opened above the limit and came back; its 102.60 high may have printed before the fill."""
+    after = [bar(11, "100.60", "102.60", "100.10", "102.00"), *flat(12, 13, "100.40")]
+    trade = run(after)
+    assert trade is not None and trade.entry_price == D("100.20")
+    assert trade.target_1_hit is False  # not +0.54 R booked on a high that predates the fill
+
+
+def test_a_limit_fill_candle_can_still_stop_the_trade_out() -> None:
+    trade = run([bar(11, "100.60", "102.60", "98.90", "99.50")])
+    assert trade is not None and trade.exit_reason == "stop"
+
+
+def test_a_better_open_fill_still_credits_the_fill_candle_target() -> None:
+    trade = run([bar(11, "100.00", "101.60", "99.90", "101.50"), *flat(12, 13, "101.50")])
+    assert trade is not None and trade.target_1_hit is True

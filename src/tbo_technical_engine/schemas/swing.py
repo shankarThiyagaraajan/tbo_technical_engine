@@ -151,6 +151,7 @@ class SwingParams(_Strict):
     min_bars: int = Field(ge=61)
     fetch_concurrency: int = Field(ge=1, le=32)
     max_failed_share: float = Field(ge=0, le=1)
+    max_stale_share: float = Field(ge=0, le=1)
     trend: TrendParams
     relative_strength: RelativeStrengthParams
     levels: LevelParams

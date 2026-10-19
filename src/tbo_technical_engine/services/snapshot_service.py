@@ -8,8 +8,9 @@ Two runs a trading day, both idempotent:
     adjustment factors can arrive overnight. A stock whose numbers did not change is not announced again (the stored
     content hash decides), and no setups are looked for: a setup is found after a close, once.
 
-One stock that cannot be loaded never stops the others, but if more than `max_failed_share` of the universe fails the
-run publishes nothing and raises: a rank over a partial universe would be quietly wrong, and the job retries.
+One stock that cannot be loaded never stops the others, but if more than `max_failed_share` of the universe fails, or
+more than `max_stale_share` has no candle for the session yet, the run publishes nothing and raises: a rank over a
+partial universe would be quietly wrong, and the job retries.
 Everything is written in one transaction, so a crash leaves nothing half-published.
 """
 
@@ -51,6 +52,10 @@ SETUP_SCHEMA = "https://tbo.internal/schemas/technical/swing_setup.v1.json"
 CLOSE = time(15, 30)
 
 Kind = Literal["close", "morning"]
+
+
+BROKEN_SKIPS = frozenset({"no_universe", "calendar_unavailable"})
+"""Skips that mean something is missing; `not_a_trading_day` is normal and tells nothing."""
 
 
 class IncompleteRun(RuntimeError):
@@ -151,6 +156,8 @@ class SnapshotService:
             if self.signals is not None:
                 self.signals.activity("technical.swing_snapshot", False, run=kind)
             raise
+        if self.signals is not None and summary.skipped in BROKEN_SKIPS:
+            self.signals.activity("technical.swing_snapshot", False, run=kind)  # a missed run must be seen (rule 13)
         if self.signals is not None and summary.skipped is None:
             self.signals.activity("technical.swing_snapshot", True, run=kind)
             self.signals.event("technical.swing_snapshot_finished", summary.snapshots_new, run=kind)
@@ -181,6 +188,10 @@ class SnapshotService:
         loaded = [r for r in results if r is not None]
         if len(summary.failed) > self.params.max_failed_share * len(universe.isins):
             raise IncompleteRun(f"{len(summary.failed)} of {len(universe.isins)} stocks could not be loaded")
+        if len(summary.stale) > self.params.max_stale_share * len(universe.isins):
+            # The feed's daily candle is late (its 15:45 reconcile runs past 16:00) or missing: ranks over the
+            # rest would be quietly wrong, so publish nothing and let the job retry (9.4).
+            raise IncompleteRun(f"{len(summary.stale)} of {len(universe.isins)} stocks have no candle for {as_of}")
 
         ranks = self._rank(loaded)
         now = self.clock()
