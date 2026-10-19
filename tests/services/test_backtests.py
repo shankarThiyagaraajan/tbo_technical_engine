@@ -69,12 +69,28 @@ async def test_a_run_stores_metrics_trades_coverage_costs_and_the_evidence(sessi
     assert result["grid"] and set(result["grid"]) == {"confluence_pct", "stop_atr"}  # the grid was walked
 
     async with sessions() as session:
+        assert await store.evidence(session, "vwap_pivot") is None  # listed stocks have no gate: not evidence (9.10)
+
+
+async def test_a_gated_run_stores_the_evidence_and_a_narrow_run_cannot_replace_it(
+    sessions: Any, tmp_path: Path
+) -> None:
+    cache = filled_cache(tmp_path)
+    backtest_id = await queue(sessions, isins=[])
+    assert await runner(sessions, cache, rules=rules_for(ISIN_A, "both")).execute(backtest_id) == "succeeded"
+    r = await row(sessions, backtest_id)
+    async with sessions() as session:
         evidence = await store.evidence(session, "vwap_pivot")
     assert evidence is not None
     assert evidence["backtest_id"] == backtest_id and evidence["low_sample"] is True  # 8 sessions: few trades
     assert evidence["costs_status"] == "placeholder" and evidence["sessions_tested"] == 8
     assert evidence["all_periods"]["trade_count"] == r.metrics["trade_count"]
     assert evidence["out_of_sample"]["trade_count"] == 0 and evidence["out_of_sample_folds"] == 0
+    narrow = await queue(sessions)  # one listed stock, no gate
+    assert await runner(sessions, cache).execute(narrow) == "succeeded"
+    async with sessions() as session:
+        again = await store.evidence(session, "vwap_pivot")
+    assert again is not None and again["backtest_id"] == backtest_id
 
 
 async def test_running_a_finished_job_again_changes_nothing(sessions: Any, tmp_path: Path) -> None:
@@ -213,3 +229,30 @@ async def test_a_queued_job_whose_send_was_lost_is_found_by_the_sweep(sessions: 
     async with sessions() as session:
         assert await store.waiting(session, NOW - timedelta(minutes=5)) == []  # too new
         assert await store.waiting(session, NOW + timedelta(minutes=5)) == [backtest_id]
+
+
+async def test_a_job_still_running_when_the_trading_session_begins_stops_and_says_so(
+    sessions: Any, tmp_path: Path
+) -> None:
+    backtest_id = await queue(sessions)
+    run = runner(sessions, filled_cache(tmp_path))
+    run.research_allowed = lambda _now: False
+    assert await run.execute(backtest_id) == "failed"
+    assert "trading session" in (await row(sessions, backtest_id)).error
+
+
+async def test_two_submissions_at_once_cannot_both_pass_the_cap(sessions: Any) -> None:
+    """9.12: the cap is 2 active jobs; ten simultaneous POSTs leave at most 2 queued."""
+    import asyncio
+
+    from tbo_platform_kit.problems import Problem
+
+    async def one() -> bool:
+        try:
+            await queue(sessions)
+        except Problem:
+            return False
+        return True
+
+    results = await asyncio.gather(*(one() for _ in range(10)))
+    assert sum(results) == SETTINGS.caps.max_concurrent_jobs

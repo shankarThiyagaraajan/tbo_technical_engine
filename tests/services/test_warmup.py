@@ -93,5 +93,5 @@ async def test_daily_candles_are_read_adjusted_and_intraday_ones_are_not() -> No
 
 
 def test_the_daily_warm_up_reaches_far_enough_back_for_a_stable_atr() -> None:
-    """9.8: 30 sessions leave the Wilder ATR 30 % seed-dependent; a restarted worker must agree with a long-running one."""
+    """9.8: 30 sessions leave the Wilder ATR 30 % seed-dependent; a restart must agree with a long-running worker."""
     assert WarmupSpec().sessions["1d"] >= 150

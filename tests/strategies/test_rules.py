@@ -3,6 +3,7 @@ side as the mirror image of the long one."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -132,6 +133,14 @@ def test_vwap_breakout_levels() -> None:
 )
 def test_vwap_breakout_filters(ctx: Context) -> None:
     assert run("vwap_breakout", ctx, vwap_params()) is None
+
+
+def test_vwap_breakout_needs_the_bars_below_to_be_in_todays_session() -> None:
+    """9.9: at 09:30 the oldest "bar below" would be yesterday's last bar against yesterday's VWAP."""
+    ctx = vwap_ctx()
+    assert run("vwap_breakout", ctx, vwap_params()) is not None
+    today = replace(ctx, session=ctx.session[-3:])  # session started 2 bars after the oldest "below" bar
+    assert run("vwap_breakout", today, vwap_params()) is None
 
 
 # ---- 15-minute opening range breakout ----------------------------------------------------------------------------

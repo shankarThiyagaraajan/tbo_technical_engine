@@ -290,7 +290,7 @@ def test_a_finished_backtest_is_an_event_and_a_missing_or_busy_one_is_not(
     outcomes = iter(["succeeded", "failed", "busy", "missing"])
 
     class Runner:
-        def __init__(self, *args: Any) -> None:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
         async def execute(self, backtest_id: str) -> str:

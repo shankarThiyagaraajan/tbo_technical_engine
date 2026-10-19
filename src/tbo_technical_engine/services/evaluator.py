@@ -136,6 +136,11 @@ class StrategyEvaluator:
                 log.error("strategy_failed", strategy=name, isin=candle.isin, error=type(exc).__name__)
         return found
 
+    def forget(self, isins: frozenset[str] | set[str]) -> None:
+        """Drop the cooldowns of stocks that left the universe, so the map does not grow with every stock ever seen."""
+        for key in [k for k in self.fired if k[0] in isins]:
+            del self.fired[key]
+
     def accept(self, candidate: SignalCandidate) -> None:
         """Start the cooldown of a candidate that was emitted."""
         close_at = candidate.candle_start_at + length("5m")

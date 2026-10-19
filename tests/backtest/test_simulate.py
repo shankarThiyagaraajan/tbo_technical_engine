@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest

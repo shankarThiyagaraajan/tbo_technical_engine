@@ -18,8 +18,8 @@ from tbo_signals import Signals
 from tbo_technical_engine import outbox
 from tbo_technical_engine.api.shapes import candidate_dict
 from tbo_technical_engine.schemas.candle import Candle
-from tbo_technical_engine.services.cooldowns import CooldownStore
 from tbo_technical_engine.schemas.signal import SignalCandidate
+from tbo_technical_engine.services.cooldowns import CooldownStore
 from tbo_technical_engine.services.evaluator import StrategyEvaluator
 from tbo_technical_engine.store import signals as store
 

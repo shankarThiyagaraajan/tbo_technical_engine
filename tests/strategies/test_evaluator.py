@@ -208,3 +208,12 @@ def test_a_special_evening_session_is_not_the_base_of_the_gap() -> None:
     buffer.add(first)
     ctx = evaluator.context(first)
     assert ctx is not None and ctx.prev_close == float(last_regular.close)
+
+
+def test_a_stock_that_left_the_universe_loses_its_cooldowns() -> None:
+    """9.13: the cooldown map must not grow with every stock ever seen."""
+    buffer, evaluator = fresh(HISTORY.before(15))
+    found = drive(buffer, evaluator, HISTORY.events(15))
+    assert found and evaluator.fired
+    evaluator.forget({found[0].isin})
+    assert all(k[0] != found[0].isin for k in evaluator.fired)
