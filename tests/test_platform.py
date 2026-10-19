@@ -51,6 +51,7 @@ async def test_unknown_route_is_a_problem(client: httpx.AsyncClient) -> None:
 async def test_one_row_redis_refuses_does_not_block_the_outbox(app: Any, redis: Any) -> None:
     """A poison row (here: a payload Redis refuses) is marked and skipped; the rows behind it are published, and
     after MAX_ATTEMPTS it is left behind with dead_at set and never retried by the sweep."""
+    from redis.exceptions import ResponseError
     from sqlalchemy import select
 
     from tbo_technical_engine import outbox
@@ -71,7 +72,7 @@ async def test_one_row_redis_refuses_does_not_block_the_outbox(app: Any, redis: 
     class RefusingPublisher:
         async def publish(self, stream: str, event: dict[str, Any]) -> str:
             if event["id"] == poison["id"]:
-                raise ConnectionError("NOPERM this user has no permissions")  # what redis-py raises for an ACL refusal
+                raise ResponseError("NOPERM this user has no permissions")  # what redis-py raises for an ACL refusal
             return str(await publisher.publish(stream, event))
 
     assert await outbox.flush(app.state.sessions, cast(EventPublisher, RefusingPublisher())) == 1
@@ -79,7 +80,7 @@ async def test_one_row_redis_refuses_does_not_block_the_outbox(app: Any, redis: 
         rows = {r.event_id: r for r in (await session.execute(select(outbox_table))).all()}
     assert rows[good["id"]].published_at is not None
     assert rows[poison["id"]].published_at is None and rows[poison["id"]].attempts == 1
-    assert rows[poison["id"]].last_error.startswith("ConnectionError")
+    assert rows[poison["id"]].last_error.startswith("ResponseError")
     for _ in range(outbox.MAX_ATTEMPTS - 1):
         await outbox.flush(app.state.sessions, cast(EventPublisher, RefusingPublisher()))
     async with app.state.sessions() as session:
