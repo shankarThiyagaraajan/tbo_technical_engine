@@ -43,7 +43,7 @@ dev = [
 [tool.uv.sources]
 tbo-platform-kit = { git = "https://github.com/shankarThiyagaraajan/tbo_platform", rev = "4e92fc0739500379c9cad8334ee09391c8ed8e61", subdirectory = "packages/tbo_platform_kit" }
 tbo-contracts = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts", rev = "46d2aec094090e727cb1275f99e38d7a4769951c" }  # 1.14.3, not tagged yet (only the Release workflow tags)
-tbo-signals = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "e5322daa2e0c64a5a5a9983bb83a20256c8f790a", subdirectory = "packages/tbo_signals" }
+tbo-signals = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "9107958ff72ac2fb1954728be773cb5b2f340455", subdirectory = "packages/tbo_signals" }
 
 
 [tool.pytest.ini_options]
