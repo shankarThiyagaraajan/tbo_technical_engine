@@ -48,3 +48,11 @@ Tests need PostgreSQL and Redis (`TBO_TEST_DATABASE_URL`, `TBO_TEST_REDIS_URL`; 
 ## Output
 
 `make check` is quiet on purpose (ruff `--quiet`, `mypy --no-error-summary`, `pytest -q --disable-warnings`); a failure still prints in full. Thresholds and tool lists are unchanged.
+
+## Releases
+
+Checks run locally (`make check`); GitHub's runner is used only for tags and releases (project rule 17). Versions are `vMAJOR.MINOR.PATCH`,
+each number 0 to 50, starting at v0.0.0 until the first major release: `main` = breaking change, `sub` = notable change or feature,
+`macro` = bug fix or review fix. A change of real size or type gets a release; a typo or tiny edit gets none. After such a merge, the
+merging thread starts Actions -> Release -> Run workflow on `main` (or `workflow_dispatch` through the GitHub API) with the level and
+three notes: what changed, why, and action needed (or None). Tags are made only by that workflow, never by hand (lesson 7).
