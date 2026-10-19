@@ -82,3 +82,16 @@ async def test_a_broken_cache_never_keeps_a_stock_cold(tmp_path: Path) -> None:
         feed.client(), CandleBuffer(), [ISIN_A], NOW, CALENDAR, WarmupSpec(), cache=ResearchCache(blocker)
     )
     assert result.warm == {ISIN_A}
+
+
+async def test_daily_candles_are_read_adjusted_and_intraday_ones_are_not() -> None:
+    """9.5: a split must not leave a gap in the daily ATR; intraday candles have no adjusted form."""
+    feed = FakeFeed([c for tf in history(ISIN_A, TODAY).values() for c in tf])
+    await warm_up(feed.client(), CandleBuffer(), [ISIN_A], NOW, CALENDAR, WarmupSpec())
+    asked = {r.url.params["timeframe"]: r.url.params.get("adjusted") for r in feed.calls if r.url.path == "/v1/candles"}
+    assert asked["1d"] == "true" and asked["5m"] is None and asked["15m"] is None
+
+
+def test_the_daily_warm_up_reaches_far_enough_back_for_a_stable_atr() -> None:
+    """9.8: 30 sessions leave the Wilder ATR 30 % seed-dependent; a restarted worker must agree with a long-running one."""
+    assert WarmupSpec().sessions["1d"] >= 150

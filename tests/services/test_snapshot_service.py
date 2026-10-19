@@ -223,7 +223,9 @@ async def test_a_late_daily_candle_for_too_many_stocks_publishes_nothing_and_rai
 ) -> None:
     """9.4: the feed's 15:45 reconcile ran past 16:00. Ranks over the rest would mislead, so retry later."""
     late = {isin(3), isin(4)}  # 2 of 6 is over the 20% limit
-    world.feed.data = [c for c in world.feed.data if not (c.isin in late and c.start_at.date() >= DAY - timedelta(days=1))]
+    world.feed.data = [
+        c for c in world.feed.data if not (c.isin in late and c.start_at.date() >= DAY - timedelta(days=1))
+    ]
     with pytest.raises(IncompleteRun):
         await world.service().run("close", DAY)
     assert await count(sessions, technical_snapshot) == 0 and await count(sessions, outbox) == 0

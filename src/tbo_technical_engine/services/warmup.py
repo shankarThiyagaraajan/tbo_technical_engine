@@ -22,6 +22,7 @@ from tbo_technical_engine.services.candle_buffer import CandleBuffer
 from tbo_technical_engine.store.research_cache import ResearchCache
 
 log = get_logger(__name__)
+ADJUSTED_TIMEFRAMES = frozenset({"1d"})
 
 
 @dataclass(frozen=True)
@@ -30,10 +31,12 @@ class WarmupSpec:
 
     Why these numbers (starting values, tuned with the strategies): EMA(21), ATR(14) and ADX(14) need about 100
     five-minute candles to settle (Wilder smoothing keeps a memory of the start); Supertrend(10, 3) on 15 minutes
-    about 30; the daily candles give ATR(14) for the opening-range rule and the previous day's pivots.
+    about 30; the daily candles give ATR(14) for the opening-range rule and the previous day's pivots. The daily
+    ATR keeps about 30 % of its seed after 30 bars, so 150 sessions (one REST page) make a restarted worker agree with
+    one that has run for months, and with the backtest (review 9.8).
     """
 
-    sessions: dict[str, int] = field(default_factory=lambda: {"5m": 5, "15m": 5, "1d": 30})
+    sessions: dict[str, int] = field(default_factory=lambda: {"5m": 5, "15m": 5, "1d": 150})
     min_bars: dict[str, int] = field(default_factory=lambda: {"5m": 100, "15m": 30, "1d": 15})
 
     @property
@@ -83,7 +86,10 @@ async def warm_up(
             try:
                 for tf, sessions in spec.sessions.items():
                     start = window_start(calendar, today, sessions)
-                    fetched: list[Candle] = [c async for c in client.candles(isin, tf, start, now)]
+                    # Daily candles are read split- and bonus-adjusted, so the daily ATR has no gap in it (9.5).
+                    fetched: list[Candle] = [
+                        c async for c in client.candles(isin, tf, start, now, adjusted=tf in ADJUSTED_TIMEFRAMES)
+                    ]
                     buffer.add_many(fetched)
                     if cache is not None:
                         try:
