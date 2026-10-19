@@ -3262,7 +3262,7 @@
                 "type": "null"
               }
             ],
-            "description": "The 12-month return in percent from TBO's own daily candles (last close against the close 250 sessions earlier). Null, never zero, when fewer than 250 daily candles exist. Feeds the stock profile's peer comparison."
+            "description": "The 12-month return in percent from TBO's own daily candles (last close against the close 250 sessions earlier). Null, never zero, when 250 or fewer daily candles exist (it needs the 250th earlier close, so 251 candles). Feeds the stock profile's peer comparison."
           }
         },
         "examples": [
