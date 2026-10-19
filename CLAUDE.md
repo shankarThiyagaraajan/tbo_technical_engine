@@ -56,3 +56,5 @@ each number 0 to 50, starting at v0.0.0 until the first major release: `main` = 
 `macro` = bug fix or review fix. A change of real size or type gets a release; a typo or tiny edit gets none. After such a merge, the
 merging thread starts Actions -> Release -> Run workflow on `main` (or `workflow_dispatch` through the GitHub API) with the level and
 three notes: what changed, why, and action needed (or None). Tags are made only by that workflow, never by hand (lesson 7).
+
+Before you report a change done, use the `release-request` skill to decide whether it needs a release (a change of real size or type, see above; a docs-only change or a typo gets none). If it does, add `releases/requests/<name>.md` (`repo:`, `level:`, then What changed, Why, Action needed) and merge it to `main`; the laptop release watcher then makes the tag and release. Never tag by hand, and never say a release exists until you have seen it. Say in your thread what you decided: request filed with its level, or "no release" with the reason.
