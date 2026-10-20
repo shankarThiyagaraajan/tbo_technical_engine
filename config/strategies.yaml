@@ -78,4 +78,4 @@ strategies:
       target_2_r: "2"
       target_2_min_gap_r: "0.5"
       target_1_min_r: "0.5"
-      require_index: false         # needs an index source (the feed has none yet); see docs/PROGRESS.md
+      require_index: false         # the feed has index candles now (ADR-019); true waits on the TE5 re-run, see docs/PROGRESS.md

@@ -8,6 +8,7 @@ import httpx
 
 from tbo_technical_engine.apps.signal_worker import SignalWorker
 from tbo_technical_engine.config.settings import Settings
+from tbo_technical_engine.services.index_feed import FeedIndexSource
 from tests.support import CALENDAR, ISIN_A, FakeFeed, fundamental_client
 
 TODAY = date(2026, 10, 15)
@@ -56,3 +57,23 @@ async def test_starts_and_stops_cleanly(redis: Any, sessions: Any, monkeypatch: 
     assert not task.done()
     stop.set()
     await asyncio.wait_for(task, 15)
+
+
+def test_the_feeds_index_source_brings_its_consumer(redis: Any, sessions: Any, monkeypatch: Any) -> None:
+    monkeypatch.setenv("TBO_MODE", "lab")
+    plain = worker(redis, sessions)
+    settings = Settings(redis_url="redis://unused", research_cache_dir="/nonexistent")
+    feed = FakeFeed().client()
+    source = FeedIndexSource(feed)
+    with_indices = SignalWorker(
+        settings,
+        redis,
+        sessions,
+        feed,
+        fundamental_client(lambda r: httpx.Response(503)),
+        calendar=CALENDAR,
+        index_source=source,
+    )
+    assert len(with_indices.consumers) == len(plain.consumers) + 1
+    assert with_indices.consumers[-1].stream.endswith("tbo.market_feed.index_candle")
+    assert with_indices.context.source is source

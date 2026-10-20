@@ -21,6 +21,7 @@ from tbo_technical_engine.backtest.walkforward import Combo
 from tbo_technical_engine.schemas.backtest import Coverage, Execution, Side, StockData, Trade
 from tbo_technical_engine.schemas.costs import CostSchedule
 from tbo_technical_engine.schemas.strategy import StrategyFile
+from tbo_technical_engine.services.evaluator import IndexSide
 from tbo_technical_engine.utils.timeframes import length
 
 GateStatus = Literal["block", "long_only", "short_only", "both"]
@@ -74,6 +75,7 @@ def run_grid(
     *,
     monotonic: Callable[[], float] | None = None,
     deadline: float = float("inf"),
+    index_side: IndexSide | None = None,
 ) -> tuple[dict[Combo, RunOutcome], str | None]:
     """Run every parameter set of `configs` over the stocks, one stock at a time.
 
@@ -84,7 +86,7 @@ def run_grid(
     are dropped when `first stock's time x number of stocks` would not fit before `deadline`; the second return value
     then says why (None when everything ran). `load` returns a stock's candles (None: no data); each config has
     `strategy` active and the others off (`overrides.for_backtest`). `tick` is called once per stock so a caller can
-    enforce a time budget.
+    enforce a time budget. `index_side` is the primary index's VWAP side for `vwap_pivot` (None: no index data).
     """
     outcomes: dict[Combo, RunOutcome] = {combo: RunOutcome() for combo in configs}
     base = next(iter(configs))
@@ -99,7 +101,7 @@ def run_grid(
                 tick()
             continue
         began = monotonic() if monotonic is not None else 0.0
-        tape = build_tape(configs[base], stock.five, stock.fifteen, stock.daily, start, end, windows)
+        tape = build_tape(configs[base], stock.five, stock.fifteen, stock.daily, start, end, windows, index_side)
         for combo in kept:
             _trade_stock(outcomes[combo], configs[combo], tape, isin, stock, execution, schedule, rules)
         if first and monotonic is not None and len(kept) > 1:

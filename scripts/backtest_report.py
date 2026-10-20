@@ -24,6 +24,7 @@ from tbo_platform_kit.http_client import IssuerTokenProvider, ServiceClient
 
 from tbo_technical_engine.backtest.costs import load_costs
 from tbo_technical_engine.backtest.engine import DayRules
+from tbo_technical_engine.backtest.index_side import PRIMARY_INDEX, index_sides
 from tbo_technical_engine.backtest.study import Study, run_study
 from tbo_technical_engine.backtest.summary import render
 from tbo_technical_engine.clients import fundamental
@@ -90,12 +91,13 @@ def main(argv: list[str] | None = None) -> int:
     names = args.strategies.split(",") if args.strategies else [n for n, s in file.strategies.items() if s.is_active]
     sessions = {i: cache.session_dates(i, "5m") for i in isins}
 
+    index_side = index_sides(cache.indices.candles(PRIMARY_INDEX, "5m"))
     studies: dict[str, Study] = {}
     for name in names:
         began = time.monotonic()
         studies[name] = run_study(
             file, name, [], None, isins, cache.stock, sessions, args.start, args.end, settings, costs, rules,
-            monotonic=time.monotonic, deadline=float("inf"),
+            monotonic=time.monotonic, deadline=float("inf"), index_side=index_side,
         )  # fmt: skip
         print(f"{name}: {len(studies[name].trades)} trades in {time.monotonic() - began:.0f} s", file=sys.stderr)
     text = render(

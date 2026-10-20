@@ -1,29 +1,34 @@
-"""The three consumers over a real Redis stream and the kit's publisher, so the wire format is the contract's."""
+"""The consumers over a real Redis stream and the kit's publisher, so the wire format is the contract's."""
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 
 import pytest
+from tbo_contracts import validate_event
 from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.mode import Mode, profile_for
 
 from tbo_technical_engine.consumers.handlers import (
     CANDLE_STREAM,
     FEED_STREAM,
+    INDEX_STREAM,
     UNIVERSE_STREAM,
     candle_consumer,
     feed_consumer,
+    index_consumer,
     universe_consumer,
 )
 from tbo_technical_engine.schemas.candle import FeedStatus, UniverseSnapshot
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
+from tbo_technical_engine.services.index_feed import FeedIndexSource
 from tbo_technical_engine.services.ingest import CandleIngest
 from tbo_technical_engine.services.readiness import Readiness
 from tbo_technical_engine.services.universe import UniverseHolder
 from tbo_technical_engine.services.warmup import WarmupSpec
-from tests.support import ISIN_A, ISIN_B, candle, candle_json, history
+from tests.support import ISIN_A, ISIN_B, FakeFeed, candle, candle_json, history, sample, spy_signals
 
 PROFILE = profile_for(Mode.LAB)
 START = datetime(2026, 10, 15, 4, 25, tzinfo=UTC)
@@ -139,3 +144,51 @@ async def test_a_new_candle_group_does_not_replay_old_stream_entries(redis: Any,
     await send_candle(redis, candle(ISIN_A, "5m", START))  # published before this worker ever started
     consumer = candle_consumer(redis, PROFILE, parts["ingest"], "w1")
     assert await consumer.run_once(block_ms=10) == []
+
+
+async def send_index(redis: Any, close: str, revision: int = 1) -> None:
+    pub = publisher(redis, "tbo_market_feed_service")
+    data = {
+        "index_code": "nifty_50",
+        "timeframe": "5m",
+        "start_at": "2026-10-15T04:25:00Z",
+        "open": "24000.00",
+        "high": "24020.00",
+        "low": "23990.00",
+        "close": close,
+        "session_vwap": "24005.10",
+        "revision": revision,
+        "source": "historical",
+    }
+    event = pub.build(
+        "tbo.market_feed.index_candle.closed.v1",
+        subject="market",
+        data=data,
+        dataschema="market_feed/index_candle.v1.json",
+    )
+    validate_event(event)  # the test's event is the contract's, so the consumer reads what the feed sends
+    await pub.publish(INDEX_STREAM, event)
+
+
+async def test_index_candle_events_reach_the_index_source(redis: Any) -> None:
+    signals, _ = spy_signals()
+    source = FeedIndexSource(FakeFeed().client())
+    consumer = index_consumer(redis, PROFILE, source, "w1", signals=signals)
+    await consumer.ensure_group()
+    await send_index(redis, "24010.00")
+    await send_index(redis, "24015.00", revision=2)
+    outcomes = await consumer.run_once(block_ms=10)
+    assert [o.result for o in outcomes] == ["processed", "processed"]
+    held = source._sorted("nifty_50", "5m")
+    assert [(c.close, c.revision, c.session_vwap) for c in held] == [(Decimal("24015.00"), 2, Decimal("24005.10"))]
+    assert sample(signals, "tbo_technical_worker_last_handled_seconds", worker="indices") is not None
+
+
+async def test_a_lost_index_group_asks_for_the_history_again(redis: Any) -> None:
+    source = FeedIndexSource(FakeFeed().client())
+    source._warm["nifty_50"] = date(2026, 10, 15)
+    consumer = index_consumer(redis, PROFILE, source, "w1")
+    await consumer.ensure_group()
+    await redis.delete(consumer.stream)  # Redis came back without its data: the group is gone
+    assert await consumer.run_once(block_ms=10) == []
+    assert source._warm == {}

@@ -66,8 +66,11 @@ def index_state(series: IndexSeries, day: date) -> IndexState | None:
     if not today:
         return None
     last = float(today[-1].close)
-    _, values = Suite([indicators.get("vwap")]).replay(Bars.from_candles(today))
-    vwap = values["vwap"]
+    if series.vwap is not None:
+        vwap = float(series.vwap)  # the feed's time-weighted VWAP: an index has no volume to weight by
+    else:
+        _, values = Suite([indicators.get("vwap")]).replay(Bars.from_candles(today))
+        vwap = values["vwap"]
     has_vwap = math.isfinite(vwap)
     return IndexState(
         index_code=series.code,

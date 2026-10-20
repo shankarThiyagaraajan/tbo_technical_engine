@@ -1,4 +1,4 @@
-"""The three event consumers of the signal worker, as EventConsumer instances over the kit."""
+"""The event consumers of the signal worker, as EventConsumer instances over the kit."""
 
 from __future__ import annotations
 
@@ -14,8 +14,9 @@ from tbo_platform_kit.metrics import Metrics
 from tbo_platform_kit.mode import ModeProfile
 from tbo_signals import Signals
 
-from tbo_technical_engine.schemas.candle import FeedStatus, UniverseSnapshot
+from tbo_technical_engine.schemas.candle import FeedStatus, IndexCandle, UniverseSnapshot
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
+from tbo_technical_engine.services.index_feed import FeedIndexSource
 from tbo_technical_engine.services.ingest import CandleIngest
 from tbo_technical_engine.services.market_calendar import LiveCalendar
 from tbo_technical_engine.services.readiness import Readiness
@@ -26,6 +27,7 @@ CANDLE_STREAM = "tbo.market_feed.candle"
 FEED_STREAM = "tbo.market_feed.feed"
 UNIVERSE_STREAM = "tbo.fundamental.universe"
 CALENDAR_STREAM = "tbo.filings.market_calendar"
+INDEX_STREAM = "tbo.market_feed.index_candle"
 
 
 class RecreatingConsumer(EventConsumer):
@@ -145,6 +147,35 @@ def calendar_consumer(
         profile,
         stream=CALENDAR_STREAM,
         group="technical.calendar",
+        consumer=name,
+        handler=handle,
+        metrics=metrics,
+        start_id="$",
+    )
+
+
+def index_consumer(
+    redis: Redis,
+    profile: ModeProfile,
+    source: FeedIndexSource,
+    name: str,
+    metrics: Metrics | None = None,
+    signals: Signals | None = None,
+) -> EventConsumer:
+    """Reads `index_candle.closed` events (ADR-019) into the index source. A group created now starts at the end of
+    the stream: the first context of the day reads the earlier candles over REST, and so does a recreated group."""
+
+    async def handle(event: dict[str, Any], session: AsyncSession | None) -> None:
+        source.offer(IndexCandle.model_validate(event["data"]))
+        if signals is not None:
+            signals.activity("technical.worker", True, worker="indices")
+
+    return RecreatingConsumer(
+        redis,
+        profile,
+        on_group_lost=source.reset,
+        stream=INDEX_STREAM,
+        group="technical.indices",
         consumer=name,
         handler=handle,
         metrics=metrics,

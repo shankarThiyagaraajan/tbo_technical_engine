@@ -42,7 +42,7 @@ dev = [
 
 [tool.uv.sources]
 tbo-platform-kit = { git = "https://github.com/shankarThiyagaraajan/tbo_platform", rev = "4e92fc0739500379c9cad8334ee09391c8ed8e61", subdirectory = "packages/tbo_platform_kit" }
-tbo-contracts = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts", rev = "a3317a22d4a7ce285e3e2e82f82c379166d4eb67" }  # 1.16.0, not tagged yet (only the Release workflow tags)
+tbo-contracts = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts", rev = "f884a2d3cc5fdf5fc6b0c60ffa91056fae2b58d9" }  # 1.30.0 (index candles, ADR-019)
 tbo-signals = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "e758307306e755c5f1df81614bb84cfde3c320ce", subdirectory = "packages/tbo_signals" }
 
 
@@ -92,9 +92,9 @@ module = ["tests.indicators.test_oracle", "tests.test_tasks"]
 disallow_untyped_calls = false
 
 [tool.uv]
-# The kit's own sources pin tbo_contracts v1.1.0; this service needs 1.14.3 (tbo_signals reads the signal manifest
-# contract, and 1.2.0 added not_implemented). Drop the override when the kit moves to 1.14.3 or later.
-override-dependencies = ["tbo-contracts @ git+https://github.com/shankarThiyagaraajan/tbo_contracts@a3317a22d4a7ce285e3e2e82f82c379166d4eb67"]
+# The kit's own sources pin tbo_contracts v1.1.0; this service needs 1.30.0 (the index candle event, ADR-019).
+# Drop the override when the kit moves to 1.30.0 or later.
+override-dependencies = ["tbo-contracts @ git+https://github.com/shankarThiyagaraajan/tbo_contracts@f884a2d3cc5fdf5fc6b0c60ffa91056fae2b58d9"]
 
 [tool.coverage.run]
 source = ["src/tbo_technical_engine"]

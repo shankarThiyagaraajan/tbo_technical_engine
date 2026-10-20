@@ -1955,10 +1955,12 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "The index VWAP (ADR-019): an index has no volume, so it is the session's time-weighted mean of the 5-minute typical price, sum((high + low + close) / 3) / n over the session's 5m candles up to now (the market feed's session_vwap). Null before the first 5m candle."
                 },
                 "is_above_vwap": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "last_price is above vwap; false while vwap is null."
                 },
                 "trend_15m": {
                   "type": "string",

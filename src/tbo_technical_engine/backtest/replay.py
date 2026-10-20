@@ -23,7 +23,7 @@ from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.schemas.signal import SignalCandidate
 from tbo_technical_engine.schemas.strategy import Params, StrategyFile
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
-from tbo_technical_engine.services.evaluator import StrategyEvaluator
+from tbo_technical_engine.services.evaluator import IndexSide, StrategyEvaluator
 from tbo_technical_engine.services.indicator_engine import IndicatorEngine
 from tbo_technical_engine.strategies.base import Context
 from tbo_technical_engine.utils.timeframes import length
@@ -63,16 +63,18 @@ def build_tape(
     start: date,
     end: date,
     windows: Sequence[tuple[time, time]] | None = None,
+    index_side: IndexSide | None = None,
 ) -> Tape:
     """The tape for sessions in [start, end]. Candles before `start` only warm the indicators up.
 
     `windows` are the entry windows to build contexts for (default: those of `config`); a sweep passes the union over
-    its parameter sets."""
+    its parameter sets. `index_side` is the primary index's VWAP side (`backtest/index_side.py`); None = no index data,
+    as live without it."""
     buffer = CandleBuffer()
     buffer.add_many(c for c in five if day_of(c) < start)
     buffer.add_many(c for c in fifteen if day_of(c) < start)
     buffer.add_many(c for c in daily if day_of(c) < start)
-    evaluator = StrategyEvaluator(IndicatorEngine(buffer), buffer, config)
+    evaluator = StrategyEvaluator(IndicatorEngine(buffer), buffer, config, index_side=index_side)
     windows = entry_windows(config) if windows is None else windows
 
     by_day: dict[date, list[Candle]] = {}
@@ -120,6 +122,7 @@ def replay_stock(
     daily: Sequence[Candle],
     start: date,
     end: date,
+    index_side: IndexSide | None = None,
 ) -> list[SignalCandidate]:
     """Candidates for sessions in [start, end]. Candles before `start` only warm the indicators up."""
-    return replay_tape(config, build_tape(config, five, fifteen, daily, start, end))
+    return replay_tape(config, build_tape(config, five, fifteen, daily, start, end, index_side=index_side))
