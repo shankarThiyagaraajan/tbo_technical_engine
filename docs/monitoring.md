@@ -28,12 +28,14 @@ A boundary with **no row** means no worker was running at its close.
 ## The ten-session exit criterion
 
 ```sh
-uv run python -m scripts.session_report --days 10          # exit 0 only with ten clean sessions in a row
+docker compose exec technical_worker python -m tbo_technical_engine.apps.session_report --days 10   # exit 0 only with ten clean sessions in a row
+uv run python -m tbo_technical_engine.apps.session_report --days 10                                # the same from a checkout
 ```
 
-A session is clean when all 75 boundaries have a row, none has a missed evaluation and none has a p95 over 2 s. Boundaries
-with the feed down do not count against it. The plan's criterion (ten consecutive sessions without a missed evaluation) is
-**pending until real market sessions have run**; nothing here can satisfy it on synthetic data.
+A session is clean when all of its boundaries (75 from 09:15 to 15:30; fewer when the calendar moves the open) have a
+row, none has a missed evaluation and none has a p95 over 2 s. Boundaries with the feed down do not count against it. The plan's criterion (ten consecutive sessions without a missed evaluation) is
+**pending until real market sessions have run**; nothing here can satisfy it on synthetic data. A special session (a
+Muhurat hour) has no boundary rows and is skipped by the streak, neither breaking nor extending it (review 9.22).
 
 ## Prometheus
 

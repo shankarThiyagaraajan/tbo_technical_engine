@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import importlib
-import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from tbo_technical_engine.apps import backtest_report
 from tbo_technical_engine.backtest.engine import DayRules
 from tbo_technical_engine.backtest.study import run_study
 from tbo_technical_engine.backtest.summary import render
-from tests.backtest.builders import COSTS, ROOT, SETTINGS
+from tests.backtest.builders import COSTS, SETTINGS
 from tests.backtest.data import FIRST, LAST, filled_cache
 from tests.strategies.session import CONFIG
 from tests.support import ISIN_A
@@ -35,30 +34,19 @@ def test_the_report_leads_with_the_caveats_and_shows_out_of_sample_apart(tmp_pat
 
 
 def test_the_report_script_writes_a_file_from_the_cache(tmp_path: Path) -> None:
-    sys.path.insert(0, str(ROOT / "scripts"))
-    try:
-        backtest_report = importlib.import_module("backtest_report")
-
-        filled_cache(tmp_path / "cache")
-        out = tmp_path / "report.md"
-        code = backtest_report.main(
-            ["--from", FIRST.isoformat(), "--to", LAST.isoformat(), "--cache", str(tmp_path / "cache"),
-             "--strategies", "orb_15m", "--out", str(out)]
-        )  # fmt: skip
-    finally:
-        sys.path.remove(str(ROOT / "scripts"))
+    filled_cache(tmp_path / "cache")
+    out = tmp_path / "report.md"
+    code = backtest_report.main(
+        ["--from", FIRST.isoformat(), "--to", LAST.isoformat(), "--cache", str(tmp_path / "cache"),
+         "--strategies", "orb_15m", "--out", str(out)]
+    )  # fmt: skip
     assert code == 0 and "## orb_15m" in out.read_text()
     assert "NOT GATED" in out.read_text()  # 9.6: no fundamental URL, so the report says it is not the go-live evidence
 
 
 def _script(tmp_path: Path) -> Any:
-    sys.path.insert(0, str(ROOT / "scripts"))
-    try:
-        module = importlib.import_module("backtest_report")
-    finally:
-        sys.path.remove(str(ROOT / "scripts"))
     filled_cache(tmp_path / "cache")
-    return module
+    return backtest_report
 
 
 def _args(tmp_path: Path, *extra: str) -> list[str]:

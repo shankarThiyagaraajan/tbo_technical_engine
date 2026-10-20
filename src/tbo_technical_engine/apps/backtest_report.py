@@ -1,14 +1,18 @@
 """Run the active strategies over the research cache and write the report (the TE5 exit-criterion report).
 
-    uv run python scripts/backtest_report.py --from 2025-10-01 --to 2026-09-30 --out report.md
-    uv run python scripts/backtest_report.py --cache .dev/research_cache --isins INE002A01018,INE040A01034 ...
+    python -m tbo_technical_engine.apps.backtest_report --from 2025-10-01 --to 2026-09-30 --out report.md
+    python -m tbo_technical_engine.apps.backtest_report --cache .dev/research_cache \
+        --isins INE002A01018,INE040A01034 ...
 
 Without --isins it uses every stock that has 5-minute candles in the cache. The point-in-time gate (who was tradable
 each day, and on which side) is applied whenever TBO_TECHNICAL_FUNDAMENTAL_URL is set, like the API job does; --no-gate
 turns it off and the report then says so at the top: such a report counts trades the live system could never take
 (shorts on long-only stocks, results days, ex-dates) and must not be used for the go-live decision. Without the gate
 it reads only the cache, so it works with no database and no network. It says how much of the requested period the
-candles really cover. Fill the cache first with scripts/fill_research_cache.py.
+candles really cover. Fill the cache first with `tbo_technical_engine.apps.fill_research_cache`. The parameter, backtest
+and cost files are the settings' (`TBO_TECHNICAL_STRATEGIES_FILE` and the rest, `config/...` from the working
+directory: `/app` in the image, the repository root in a checkout). In the image (review 9.21) run it where the cache
+is mounted: `docker compose exec technical_research python -m tbo_technical_engine.apps.backtest_report ...`.
 """
 
 from __future__ import annotations
@@ -34,7 +38,6 @@ from tbo_technical_engine.services.point_in_time import load_rules
 from tbo_technical_engine.services.strategy_loader import load_strategies
 from tbo_technical_engine.store.research_cache import ResearchCache
 
-ROOT = Path(__file__).resolve().parents[1]
 UNGATED_BANNER = (
     "NOT GATED: no point-in-time gate was applied, so this counts trades the live system could never take "
     "(shorts on long-only stocks, results days, ex-dates). Do not use it for the go-live decision."
@@ -75,10 +78,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--banner", help="a warning printed at the top (for example: synthetic data)")
     args = ap.parse_args(argv)
 
-    file = load_strategies(ROOT / "config" / "strategies.yaml")
-    settings = load_settings(ROOT / "config" / "backtest.yaml")
-    costs = load_costs(ROOT / "config" / "costs.yaml")
     settings_env = Settings()
+    file = load_strategies(settings_env.strategies_file)
+    settings = load_settings(settings_env.backtest_file)
+    costs = load_costs(settings_env.costs_file)
     gated = settings_env.fundamental_url is not None if args.gate is None else args.gate
     if gated and settings_env.fundamental_url is None:
         print("--gate needs TBO_TECHNICAL_FUNDAMENTAL_URL", file=sys.stderr)

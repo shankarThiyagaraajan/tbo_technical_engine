@@ -1,16 +1,19 @@
 """Fill the research cache from the market feed's candle history (the report needs months of candles; the live worker's
 warm-up only writes the last few sessions).
 
-    uv run python scripts/fill_research_cache.py --from 2025-10-01 --to 2026-09-30
-    uv run python scripts/fill_research_cache.py --from 2026-09-01 --to 2026-09-30 --isins INE002A01018 \
+    python -m tbo_technical_engine.apps.fill_research_cache --from 2025-10-01 --to 2026-09-30
+    python -m tbo_technical_engine.apps.fill_research_cache --from 2026-09-01 --to 2026-09-30 --isins INE002A01018 \
         --timeframes 5m,1d
 
-    uv run python scripts/fill_research_cache.py --from 2025-10-01 --to 2026-09-30 --indices nifty_50 --isins none
+    python -m tbo_technical_engine.apps.fill_research_cache --from 2025-10-01 --to 2026-09-30 \
+        --indices nifty_50 --isins none
 
 --indices also fills the index candles (5m) that `vwap_pivot`'s index filter reads in a backtest (ADR-019);
 `--isins none` skips the stocks. Without --isins it takes the fundamental engine's universe of --to. Needs the
 TBO_TECHNICAL_* settings and a token issuer, like the worker; the cache directory is `TBO_TECHNICAL_RESEARCH_CACHE_DIR`.
-Safe to repeat.
+Safe to repeat. In the image (review 9.21) run it where the cache volume is mounted writable (the signal worker:
+`docker compose exec technical_signal python -m tbo_technical_engine.apps.fill_research_cache ...`); from a checkout,
+`uv run python -m tbo_technical_engine.apps.fill_research_cache ...`.
 """
 
 from __future__ import annotations
