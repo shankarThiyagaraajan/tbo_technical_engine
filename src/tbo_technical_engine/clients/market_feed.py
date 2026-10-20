@@ -37,7 +37,7 @@ class MarketFeedClient:
         if adjusted:
             params["adjusted"] = True
         async for item in self._pages("/v1/candles", params):
-            yield Candle.model_validate(item)
+            yield Candle.from_message(item)
 
     async def index_candles(
         self, index_code: str, timeframe: str, start: datetime, end: datetime

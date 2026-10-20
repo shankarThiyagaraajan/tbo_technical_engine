@@ -19,7 +19,10 @@ from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.utils.timeframes import length
 
 CAPACITY = {"1m": 1000, "5m": 1000, "15m": 500, "60m": 300, "1d": 400, "1w": 120}
-"""Most candles kept per series: about 13 sessions of 5-minute candles, 20 of 15-minute ones, 400 daily candles."""
+"""Most candles kept per series: about 13 sessions of 5-minute candles, 20 of 15-minute ones, 400 daily candles.
+At 500 stocks that is 950,000 candles, about 390 MB with the compact `Candle` (review 9.20; it was 1.5 GB as pydantic
+models, over the signal worker's 1 GB limit). `tests/synthetic/test_memory.py` bounds it; `scripts/benchmark.py memory`
+measures it."""
 
 
 class SeriesView(Sequence[Candle]):
