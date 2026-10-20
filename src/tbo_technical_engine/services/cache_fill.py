@@ -66,3 +66,29 @@ async def fill_cache(
 
     await asyncio.gather(*(one(i) for i in isins))
     return result
+
+
+async def fill_index_cache(
+    feed: MarketFeedClient,
+    cache: ResearchCache,
+    codes: Sequence[str],
+    start: date,
+    end: date,
+    timeframes: Sequence[str] = ("5m",),
+) -> FillResult:
+    """Page the feed's `/v1/index-candles` for `start`..`end` (inclusive) into the cache's index folder, so a backtest
+    can apply `vwap_pivot`'s index filter (ADR-019). Idempotent like `fill_cache`."""
+    result = FillResult()
+    for code in codes:
+        try:
+            for tf in timeframes:
+                fetched = [
+                    c.as_candle()
+                    async for c in feed.index_candles(code, tf, _midnight(start), _midnight(end + timedelta(days=1)))
+                ]
+                cache.indices.write(code, tf, fetched)
+                result.candles += len(fetched)
+        except UpstreamUnavailable as exc:
+            log.warning("index_cache_fill_failed", index_code=code, error=str(exc)[:200])
+            result.failed.append(code)
+    return result

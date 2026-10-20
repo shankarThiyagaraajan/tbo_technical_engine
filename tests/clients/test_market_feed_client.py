@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -90,3 +91,46 @@ async def test_feed_status_error_raises() -> None:
     )
     with pytest.raises(UpstreamUnavailable):
         await client.feed_status()
+
+
+async def test_index_candles_and_the_index_list() -> None:
+    calls: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if request.url.path == "/v1/indices":
+            row = {"index_code": "india_vix", "name": "INDIA VIX", "kind": "volatility", "is_tracked": True}
+            return httpx.Response(200, json={"indices": [row]})
+        item = {
+            "index_code": "nifty_50",
+            "timeframe": "5m",
+            "start_at": "2026-10-15T03:45:00Z",
+            "open": "24000.00",
+            "high": "24020.00",
+            "low": "23990.00",
+            "close": "24010.00",
+            "session_vwap": "24006.67",
+            "revision": 1,
+            "source": "quote",
+        }
+        page = request.url.params.get("cursor")
+        return httpx.Response(200, json={"items": [item], "next_cursor": None if page else "1"})
+
+    client = market_feed.MarketFeedClient(
+        make_client(market_feed.AUDIENCE, market_feed.SCOPES, httpx.MockTransport(handle))
+    )
+    got = [c async for c in client.index_candles("nifty_50", "5m", T0, T0 + timedelta(hours=1))]
+    assert [(c.index_code, c.session_vwap, c.source) for c in got] == [("nifty_50", Decimal("24006.67"), "quote")] * 2
+    assert calls[0].url.path == "/v1/index-candles"
+    assert (calls[0].url.params["index_code"], calls[0].url.params["from"]) == ("nifty_50", "2026-10-15T03:45:00Z")
+    assert got[0].as_candle().volume == 0
+    [info] = await client.indices()
+    assert (info.index_code, info.kind, info.is_tracked, info.last_candle_at) == ("india_vix", "volatility", True, None)
+
+
+async def test_a_failed_index_list_raises() -> None:
+    client = market_feed.MarketFeedClient(
+        make_client(market_feed.AUDIENCE, market_feed.SCOPES, httpx.MockTransport(lambda r: httpx.Response(500)))
+    )
+    with pytest.raises(UpstreamUnavailable, match="/v1/indices answered 500"):
+        await client.indices()

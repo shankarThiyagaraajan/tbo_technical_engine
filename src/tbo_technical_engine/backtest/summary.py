@@ -30,6 +30,20 @@ FOLD_HEAD = "\n".join(
 )
 
 
+def _index_line(studies: Mapping[str, Study]) -> list[str]:
+    """Whether `vwap_pivot` ran with its index filter (review 2.4: a run without index candles must say so)."""
+    pivot = studies.get("vwap_pivot")
+    if pivot is None:
+        return []
+    if not pivot.index_filter:
+        return [
+            "- **Index filter off**: the research cache has no nifty_50 index candles (`scripts/fill_research_cache.py "
+            "--indices`), so `vwap_pivot` ran as live does without index data: with `require_index: true` it takes no "
+            "trade, with `false` it trades without the index check."
+        ]
+    return ["- Index filter on: `vwap_pivot` read nifty_50's side of its VWAP from the cached index candles (ADR-019)."]
+
+
 def render(
     studies: Mapping[str, Study],
     *,
@@ -63,6 +77,7 @@ def render(
         "window and never saw these days. In-sample rows are shown only to compare with them."
     )
     lines.append(f"- A strategy with fewer than {settings.evidence.min_trades} trades is marked `low sample`.")
+    lines += _index_line(studies)
     for name, s in studies.items():
         c = s.coverage
         lines.append(

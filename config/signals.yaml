@@ -51,7 +51,7 @@ signals:
     unit: seconds
     description: When each part of the signal worker last handled something, or last failed.
     labels:
-      worker: {enum: [candles, feed, universe, supervisor, calendar]}
+      worker: {enum: [candles, feed, universe, supervisor, calendar, indices]}
     upstream: [market_feed, fundamental, filings]
 
   - id: technical.calendar_age
@@ -59,6 +59,21 @@ signals:
     unit: seconds
     description: Seconds since the trading calendar was last fetched from the filings extractor (an old value means the API is down and the cache is in use).
     upstream: [filings]
+
+  - id: technical.index_missing
+    kind: gauge
+    unit: indices
+    description: At the latest market context, tracked indices (India VIX among them) whose 5-minute candles are two or more candles late, from the event stream and the market feed's REST API alike (ADR-019). They are left out of the context; 0 when every index is current.
+    upstream: [market_feed]
+    downstream: [decision]
+
+  - id: technical.index_reads
+    kind: count
+    unit: requests
+    description: Reads of index candles over the market feed's REST API, by result. The first context of a day reads each index's history; more reads during the session mean the index event stream fell behind.
+    labels:
+      result: {enum: [ok, failed]}
+    upstream: [market_feed]
 
   - id: technical.swing_snapshot
     kind: activity

@@ -1,10 +1,10 @@
 """The signal worker process: `uv run python -m tbo_technical_engine.apps.signal_worker`.
 
-One process handles the whole universe (plan: "one signal worker at the planned scale"). It runs three consumers
-(candles, feed health, universe), a supervisor that warms the buffer from REST history, and the indicator recorder's
-write loop. Each 5-minute candle's outcome goes to the latency tracker; the supervise loop turns closed boundaries into
-`evaluation_boundary` rows (TE8). Every evaluated candle goes to the indicator recorder (a snapshot in memory),
-then to the strategies (`SignalRunner`).
+One process handles the whole universe (plan: "one signal worker at the planned scale"). It runs its consumers
+(candles, feed health, universe, the trading calendar and, with the feed's index source, index candles), a supervisor
+that warms the buffer from REST history, and the indicator recorder's write loop. Each 5-minute candle's outcome goes
+to the latency tracker; the supervise loop turns closed boundaries into `evaluation_boundary` rows (TE8). Every
+evaluated candle goes to the indicator recorder (a snapshot in memory), then to the strategies (`SignalRunner`).
 """
 
 from __future__ import annotations
@@ -29,13 +29,20 @@ from tbo_signals import Signals
 from tbo_technical_engine import outbox
 from tbo_technical_engine.clients import fundamental, market_feed
 from tbo_technical_engine.config.settings import REPOSITORY, Settings
-from tbo_technical_engine.consumers.handlers import calendar_consumer, candle_consumer, feed_consumer, universe_consumer
+from tbo_technical_engine.consumers.handlers import (
+    calendar_consumer,
+    candle_consumer,
+    feed_consumer,
+    index_consumer,
+    universe_consumer,
+)
 from tbo_technical_engine.context.index_source import IndexSource
 from tbo_technical_engine.schemas.latency import BoundaryLatency
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
 from tbo_technical_engine.services.context_service import ContextService
 from tbo_technical_engine.services.cooldowns import CooldownStore
 from tbo_technical_engine.services.evaluator import StrategyEvaluator
+from tbo_technical_engine.services.index_feed import FeedIndexSource
 from tbo_technical_engine.services.indicator_engine import IndicatorEngine
 from tbo_technical_engine.services.ingest import CandleIngest
 from tbo_technical_engine.services.latency import LatencyRecorder, LatencyTracker
@@ -141,6 +148,8 @@ class SignalWorker:
         ]
         if self.live is not None and self.live.configured:
             self.consumers.append(calendar_consumer(redis, profile, self.live, name, metrics))
+        if isinstance(index_source, FeedIndexSource):
+            self.consumers.append(index_consumer(redis, profile, index_source, name, metrics, signals))
 
     def drop_stocks(self, isins: frozenset[str]) -> None:
         """Forget what the engine holds for stocks that left the universe: indicator streams and cooldowns (9.13)."""
@@ -197,7 +206,7 @@ class SignalWorker:
                 await asyncio.wait_for(stop.wait(), TICK_SECONDS)
 
     async def run(self, stop: asyncio.Event) -> None:
-        """Run the three stream consumers and the supervisor until `stop` is set, then wait for them to finish."""
+        """Run the stream consumers and the supervisor until `stop` is set, then wait for them to finish."""
         log.info("signal_worker_started", mode=self.settings.profile.mode.value)
         tasks = [asyncio.create_task(c.run(stop)) for c in self.consumers] + [
             asyncio.create_task(self.supervise(stop)),
@@ -232,14 +241,16 @@ async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
     serve_metrics(settings, signals)
     calendar = build_calendar(settings, tokens, signals)
     try:
+        feed = market_feed.MarketFeedClient(feed_http)
         worker = SignalWorker(
             settings,
             redis,
             session_factory(engine),
-            market_feed.MarketFeedClient(feed_http),
+            feed,
             fundamental.FundamentalClient(fund_http),
             metrics,
             calendar=calendar,
+            index_source=FeedIndexSource(feed, signals),
             signals=signals,
         )
         await worker.run(stop)

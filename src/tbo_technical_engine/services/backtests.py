@@ -21,6 +21,7 @@ from tbo_platform_kit.problems import Problem
 
 from tbo_technical_engine.backtest.engine import DayRules
 from tbo_technical_engine.backtest.evidence import build_evidence
+from tbo_technical_engine.backtest.index_side import PRIMARY_INDEX, index_sides
 from tbo_technical_engine.backtest.overrides import OverrideError, for_backtest
 from tbo_technical_engine.backtest.report import contract_metrics, study_result
 from tbo_technical_engine.backtest.study import run_study
@@ -226,6 +227,7 @@ class BacktestRunner:
             tick=tick,
             monotonic=self.monotonic,
             deadline=deadline,
+            index_side=index_sides(self.cache.indices.candles(PRIMARY_INDEX, "5m")),
         )
         result = study_result(study, self.settings, self.costs)
         evidence = None

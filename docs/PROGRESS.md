@@ -10,7 +10,7 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 | TE1 Market feed integration | Built, tested against a fake feed over `httpx.MockTransport` and a real Redis (no real feed or Kite). `candle.closed`, `feed.status` and `universe.published` consumers; typed history client with cursor paging; Parquet research cache (write-through at warm-up); warm-up at start, 09:00 IST and after an outage; evaluation suspended while the feed is unhealthy. |
 | TE2 Indicator library | Built. EMA/SMA, ATR, ADX, RSI, Supertrend, session VWAP and bands, classic/Camarilla pivots, CPR, opening range, volume average, relative strength; batch and streaming forms agree over a year of data; EMA/ATR/ADX/RSI match TA-Lib to 1e-6 (TA-Lib is a test-only dependency). Live `IndicatorEngine` (rebuilds on any non-append change), `indicator_snapshot` table (14-day retention, pruned 02:30 IST), `GET /v1/indicators/{isin}`. |
 | TE3 Intraday strategy engine | Built. The five strategies (`ema_9_21_crossover`, `vwap_breakout`, `orb_15m`, `pivot_supertrend`, `vwap_pivot`), long and short, as pure rules over a context; parameters and `params_version` in `config/strategies.yaml`; entry windows (09:30-14:30 IST, ORB to 11:30) and per-strategy cooldowns (30 min; ORB once a session); cooldown checkpoint in Redis; candidates stored in `signal_candidate` and announced as `signal.candidate.v1` through the outbox; `GET /v1/signals`, `/v1/signals/{id}`, `/v1/strategies`. A replayed or restarted session gives identical candidates (tested). Not done: gate 3 (chart review of 10 recorded sessions) needs real recorded sessions. |
-| TE4 Market context | Built, with one gap. Breadth over the universe (advancing/declining/unchanged against the previous close), data quality from the feed's health, CPR day class, index states (VWAP side, 15-minute trend) and the VIX change, published as `market.context.v1` every 5 minutes from 09:15 to 15:30 IST (once per boundary, stored in `market_context`); `GET /v1/context` and `/v1/context/history`. **The market feed has no index or VIX data**, so index states, VIX and CPR class are empty/null until an `IndexSource` exists; the code and tests for them run on fake index data. Exit criterion (5 sessions on time, matched by hand) needs live sessions. |
+| TE4 Market context | Built. Breadth over the universe (advancing/declining/unchanged against the previous close), data quality from the feed's health, CPR day class, index states (VWAP side, 15-minute trend) and the VIX change, published as `market.context.v1` every 5 minutes from 09:15 to 15:30 IST (once per boundary, stored in `market_context`); `GET /v1/context` and `/v1/context/history`. **Index data (ADR-019, 2026-10-20):** `services/index_feed.FeedIndexSource` reads the market feed's `index_candle.closed` events (consumer group `technical.indices`) with `GET /v1/index-candles` as the fallback, so index states, VIX and CPR class are filled once the feed's index poll runs; an index with no candles is left out and counted by `technical.index_missing`. Not yet seen on a real session (needs the feed's poll in paper). Exit criterion (5 sessions on time, matched by hand) needs live sessions. |
 | TE6 Swing analysis and daily snapshot | Built (branch `claude/technical-te6-9kz86w`), tested on fixtures and a fake feed with a real PostgreSQL and Redis; no real feed or recorded history yet. `swing/` (pure): trend state and score, relative-strength percentile, support and resistance zones, ATR % and its one-year percentile, volatility regime, Bollinger squeeze, 20-day traded value and a Corwin-Schultz spread estimate, and three long-only setup detectors (base breakout, pullback to the 20 or 50 EMA, 52-week high breakout). `SnapshotService` runs at 16:00 IST (snapshots + setups) and 08:00 IST (snapshot refresh) as Celery tasks on the new `technical.swing` queue; announces `technical.snapshot.v1` and `swing.setup.v1` through the outbox; `GET /v1/snapshots`, `/v1/snapshots/{isin}`, `/v1/swing-setups`. Parameters in `config/swing.yaml`. 500 stocks are measured and ranked in about two seconds (the daily-candle fetch is the rest of the half hour). Exit criterion 2 (30 setups reviewed) is prepared as `docs/swing-review-sample.md` on fixtures; the review on recorded data waits for recorded sessions. |
 | TE5 Backtesting and research | Built (branch `claude/technical-te5-0p6q89`), checked locally only (CI did not run). `POST /v1/backtests`, `GET /v1/backtests/{id}` and `/trades` replace the stubs (scope `technical:research`, `Idempotency-Key`); the job runs on the `technical.research` queue and replays each stock through the live `StrategyEvaluator`, `IndicatorEngine` and `CandleBuffer` (a test proves its candidates equal the live worker's). Fills, exits, slippage and the Indian intraday cost model (`config/costs.yaml`) turn candidates into trades; metrics are in R, after charges. Walk-forward with a parameter grid (`config/backtest.yaml`), out-of-sample reported apart, parameter stability, vectorbt return statistics, per-strategy evidence summary in `strategy_evidence`, caps on stocks, days, stock-days and concurrent jobs, a job time budget, and a Beat sweep that re-sends lost jobs. `scripts/backtest_report.py` writes the Markdown report. **Not done:** the exit criterion (a 12-month report on all five strategies) needs recorded candles and none exist yet, and the costs are a **placeholder** until the owner confirms them (see Decisions and Open items). |
 | TE7 Profiling and Numba | Built on branch `claude/te7-te8-9h7qqj` (ADR `docs/adr/0001-profiling-and-numba.md`). Profiled on a **synthetic market** (`synthetic/`, `scripts/benchmark.py`): replay 8.5x faster, a full sweep 35x faster (331 s to 9.4 s on 2 stocks x 60 sessions, identical trades), live path at 500 stocks p95 0.88 s (was 5.9 s with the same code before priming and the background audit writer). Numba assessed and **not compiled** (no numeric loop dominates); `scripts/identity_check.py` proves JIT on/off identity (20 synthetic sessions in a test). **Pending on real data:** p95 under 2 s on a real session, the walk-forward sweep timed on the mini PC, identity on recorded sessions. |
@@ -21,6 +21,22 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 
 ## Decisions
 
+- **Index source (ADR-019, 2026-10-20).** `services/index_feed.FeedIndexSource` is the `IndexSource` of the signal worker. Events
+  first: the `technical.indices` consumer (start at `$`) offers every `index_candle.closed` to the source, newest revision wins. REST is
+  the fallback: the first context of a day reads each tracked index's 5m of today, 15m of 7 days and 1d of 10 days over
+  `GET /v1/index-candles` (a restart mid-session has no events for the earlier candles), and an index two or more 5m candles late is read
+  again, at most once per 5 minutes. The tracked list comes from `GET /v1/indices` hourly (unknown: nifty_50 and India VIX are expected).
+  India VIX is the VIX reading (newest 5m close against the previous 1d close), never an index state. The index VWAP is the feed's
+  `session_vwap` (an index has no volume, so the volume-weighted indicator would be NaN). A missing index is left out and counted
+  (`technical.index_missing`); it does **not** mark the context degraded, because degraded stops every call and the decision engine
+  scores without the index instead. Timing: the feed polls 20 s after a boundary and the context is built 15 s after it, so the context
+  at T normally carries the index candle that closed at T - 5 minutes; accepted rather than delaying the context (the decision engine's
+  latency budget). A lost consumer group asks for the REST history again.
+- **TE5 index filter (review 2.4, 2.6).** A backtest rebuilds nifty_50's VWAP side from the research cache's index candles
+  (`<cache>/indices/5m/nifty_50.parquet`, filled by `scripts/fill_research_cache.py --indices nifty_50`), using the side of the newest
+  index candle that closed by the entry candle's start (`backtest/index_side.py`; live may lag one candle more). Without those candles a
+  study runs as live without index data, and the Markdown report says **Index filter off** in its header. `config/strategies.yaml`
+  keeps `require_index: false` until the TE5 re-run with `require_index: true` is seen; switching it is a new `params_version`.
 - **Signals (tbo_signals).** `GET /v1/signals` is this service's trade-candidate list, so the library's default manifest path is taken: the
   manifest is served at `GET /v1/signal-manifest` instead (`services/platform_signals.MANIFEST_PATH`); the platform registry needs this
   path for `technical`. The route is in the contract since tbo_contracts 1.7.0, so
@@ -123,9 +139,11 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   runs). Run `scripts/backtest_report.py --from <date> --to <date>` when 12 months are there; it states the coverage it found.
 - **TE5 contract change to decide:** serve the evidence summary and the extra result fields (`docs/te5-contract-proposal.md`).
 
-- **No index or VIX in the market feed contract (blocks the index half of TE4 and `vwap_pivot`'s index filter).** Options: the feed adds index
-  and VIX instruments (a contract change, then an `IndexSource` over its REST API), or this service gets its own source. Not decided; not done
-  here because the feed is another repository and a second Kite client is forbidden.
+- **Index data (ADR-019): built, not yet seen live.** The feed's index candles reach the context (see the TE4 row and the decision
+  "Index source"). Open: run the feed's 12-month index backfill, fill the research cache (`scripts/fill_research_cache.py --indices
+  nifty_50 --isins none`), re-run the TE5 `vwap_pivot` study with `require_index: true` (a `params_overrides` entry), then decide whether
+  the live file sets `require_index: true` (a new `params_version`; the owner's call, not made here). Also open: TE6's sector-relative rank
+  (the sector indices exist now) and CODE-CHANGES item 1 in tbo_plans.
 - Gate 3 (chart review of 10 recorded sessions) and the TE4 exit criterion need recorded sessions; the replay tests use synthetic ones.
 
 - **Trading calendar (reference data R5).** The kit's holiday file is gone; trading days and sessions come from the filings extractor
@@ -140,13 +158,15 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   path for the cache (`/app/data` is a tmpfs, so the fallback would not survive a restart).
 - No `deploy/services/tbo_technical_engine.yml` in tbo_platform yet (env: `TBO_TECHNICAL_MARKET_FEED_URL`, `..._FUNDAMENTAL_URL`, Redis ACL
   read access to `tbo.market_feed.*` and `tbo.fundamental.universe`).
+  The index stream `tbo.market_feed.index_candle` falls under `tbo.market_feed.*`.
 
 ## TE6 decisions (where the plan was silent)
 
 - **Relative strength has no benchmark yet.** The plan ranks the 20- and 60-day return against Nifty and the sector index.
   Every stock is measured against the same Nifty, so subtracting it cannot change the order: the percentile of the plain
-  returns *is* the Nifty-relative percentile. The sector index would change the order and is not available (the feed has
-  no index data), so it is left out; the rank then needs one subtraction per stock when an index source exists.
+  returns *is* the Nifty-relative percentile. The sector index would change the order; the feed has sector index candles since ADR-019
+  (2026-10-20) but the rank does not read them yet, so it is left out;
+  reading them needs one subtraction per stock and each stock's sector index.
   `rs_percentile` is the weighted mean of the 20-day and 60-day return ranks (0.5 / 0.5), each rank 0-100 with ties counted half.
 - **Trend** (`swing/trend.py`): six bullish conditions (close above the 20 and 50 EMA, 20 above 50, 50 above 200, 50 EMA rising,
   +DI above -DI) are weighted to 100 points; a condition that cannot be evaluated yet (the 200 EMA before 200 sessions)

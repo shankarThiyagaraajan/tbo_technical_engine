@@ -72,3 +72,15 @@ signal). The boundaries in between have no row, so the session report shows them
 What to do: restart the worker (or let the container manager do it); confirm `warmup_done` with `cold=0` in the log and a
 row for the next boundary. The restart cost is the warm-up (REST history for the whole universe) plus up to one 15 s
 supervisor tick.
+
+## Index data missing
+
+The context has no index states or VIX (`GET /v1/context`: `index_states` empty, `vix` null) or `technical.index_missing` is above 0.
+No alert of its own: the producer side alerts (`MarketFeedIndexStale` in tbo_platform). Calls go on without the index (the decision
+engine's renormalised scorer); `vwap_pivot` trades without its index check while `require_index` is false.
+
+- The feed side first: `GET /v1/indices` on the market feed (every tracked index needs a `kite_instrument_id`) and its
+  `tbo_market_feed_index_age_seconds`. A stopped index poll there is the usual cause; see the feed's runbook.
+- The feed is fine but this worker is not current: the `technical.indices` group's lag (`XINFO GROUPS <mode>.tbo.market_feed.index_candle`)
+  and log lines `index_candles_unavailable` / `index_list_unavailable` (the REST fallback failed: grant or URL). `technical.index_reads`
+  with `result="failed"` counts those. A restart of the signal worker reads today's index candles over REST again.

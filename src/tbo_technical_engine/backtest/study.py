@@ -25,6 +25,7 @@ from tbo_technical_engine.schemas.backtest import (
 )
 from tbo_technical_engine.schemas.costs import CostSchedule
 from tbo_technical_engine.schemas.strategy import StrategyFile
+from tbo_technical_engine.services.evaluator import IndexSide
 
 
 @dataclass
@@ -41,6 +42,8 @@ class Study:
     """The grid that was walked; empty when there was none or it was skipped."""
     grid_skipped: str | None = None
     sessions: list[date] = field(default_factory=list)
+    index_filter: bool = False
+    """True when the primary index's candles were there, so `vwap_pivot`'s index filter ran as live (ADR-019)."""
 
 
 def run_study(
@@ -60,6 +63,7 @@ def run_study(
     tick: Callable[[], None] | None = None,
     monotonic: Callable[[], float],
     deadline: float,
+    index_side: IndexSide | None = None,
 ) -> Study:
     """Parameter sets beyond the file's own only when they fit in the time left: after the first stock, the time it took
     for all sets times the number of stocks must fit before `deadline`, else the walk-forward uses the fixed parameters
@@ -80,7 +84,7 @@ def run_study(
     }
     outcomes, skipped = run_grid(
         configs, strategy, isins, load, start, end, settings.execution, costs, rules, tick,
-        monotonic=monotonic, deadline=deadline,
+        monotonic=monotonic, deadline=deadline, index_side=index_side,
     )  # fmt: skip
     runs: dict[Combo, list[Trade]] = {combo: out.trades for combo, out in outcomes.items()}
     base_out = outcomes[base_combo]
@@ -101,4 +105,5 @@ def run_study(
         grid=grid if skipped is None else {},
         grid_skipped=skipped,
         sessions=sessions,
+        index_filter=index_side is not None,
     )

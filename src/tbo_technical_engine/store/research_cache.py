@@ -39,6 +39,12 @@ class ResearchCache:
     def __init__(self, root: Path) -> None:
         self.root = root
 
+    @property
+    def indices(self) -> ResearchCache:
+        """The cache of index candles (ADR-019), in its own folder so a listing of stocks never finds an index. An
+        index's candles are kept as `Candle` rows under its code (`nifty_50`) with volume 0."""
+        return ResearchCache(self.root / "indices")
+
     def path(self, isin: str, timeframe: str) -> Path:
         """Where the file for a series lives (it may not exist yet)."""
         return self.root / timeframe / f"{isin}.parquet"
