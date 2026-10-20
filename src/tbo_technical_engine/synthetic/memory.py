@@ -10,10 +10,11 @@ that differ from candle to candle, so nothing is shared by accident and the figu
 from __future__ import annotations
 
 import gc
-import random
 import tracemalloc
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+
+import numpy as np
 
 from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.services.candle_buffer import CAPACITY, CandleBuffer
@@ -43,12 +44,12 @@ class BufferMemory:
         return self.traced_bytes / self.stocks * stocks / 1_000_000
 
 
-def candles_at_capacity(isin: str, rnd: random.Random) -> list[Candle]:
+def candles_at_capacity(isin: str, rng: np.random.Generator) -> list[Candle]:
     """One stock's candles of every kept timeframe, `CAPACITY` of each, parsed from the feed's JSON shape."""
     out: list[Candle] = []
     for timeframe in TIMEFRAMES:
         for i in range(CAPACITY[timeframe]):
-            price = 500 + rnd.randint(0, 20_000) * 0.05
+            price = 500 + int(rng.integers(0, 20_001)) * 0.05
             out.append(
                 Candle.from_message(
                     {
@@ -59,7 +60,7 @@ def candles_at_capacity(isin: str, rnd: random.Random) -> list[Candle]:
                         "high": f"{price + 1.5:.2f}",
                         "low": f"{price - 1.25:.2f}",
                         "close": f"{price + 0.35:.2f}",
-                        "volume": 100_000 + rnd.randint(0, 1_000_000),
+                        "volume": 100_000 + int(rng.integers(0, 1_000_001)),
                         "revision": 1,
                     }
                 )
@@ -69,10 +70,10 @@ def candles_at_capacity(isin: str, rnd: random.Random) -> list[Candle]:
 
 def fill(stocks: int, seed: int = 1) -> CandleBuffer:
     """A fresh buffer filled to capacity for `stocks` stocks."""
-    rnd = random.Random(seed)  # noqa: S311  (synthetic prices, not a secret)
+    rng = np.random.default_rng(seed)
     buffer = CandleBuffer()
     for s in range(stocks):
-        buffer.add_many(candles_at_capacity(f"INE{s:06d}A01", rnd))
+        buffer.add_many(candles_at_capacity(f"INE{s:06d}A01", rng))
     return buffer
 
 
