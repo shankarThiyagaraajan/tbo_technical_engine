@@ -50,6 +50,7 @@ indicator_snapshot = Table(
     Column("backend", String(10), nullable=False),
     Column("computed_at", DateTime(timezone=True), nullable=False),
 )
+Index("ix_indicator_snapshot_computed_at", indicator_snapshot.c.computed_at)  # the nightly prune (migration 0008)
 
 # Every candidate emitted. The ID is derived from (isin, strategy, side, candle), so the same candle evaluated twice
 # cannot be stored twice.
@@ -198,3 +199,4 @@ evaluation_boundary = Table(
     Column("max_seconds", Float, nullable=True),
     Column("written_at", DateTime(timezone=True), nullable=False),
 )
+Index("ix_evaluation_boundary_trade_date", evaluation_boundary.c.trade_date)  # `for_day` (migration 0007)

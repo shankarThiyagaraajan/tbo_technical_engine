@@ -77,3 +77,26 @@ def test_the_feeds_index_source_brings_its_consumer(redis: Any, sessions: Any, m
     assert len(with_indices.consumers) == len(plain.consumers) + 1
     assert with_indices.consumers[-1].stream.endswith("tbo.market_feed.index_candle")
     assert with_indices.context.source is source
+
+
+async def test_a_missing_universe_is_asked_for_once_a_minute_not_every_tick(
+    redis: Any, sessions: Any, monkeypatch: Any
+) -> None:
+    """9.26: on a holiday or a late build, every 15 s tick used to call the fundamental engine."""
+    monkeypatch.setenv("TBO_MODE", "lab")
+    calls: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(200, json={"items": [], "next_cursor": None})
+
+    settings = Settings(redis_url="redis://unused", research_cache_dir="/nonexistent")
+    w = SignalWorker(settings, redis, sessions, FakeFeed().client(), fundamental_client(handle), calendar=CALENDAR)
+    now = [1000.0]
+    w.monotonic = lambda: now[0]
+    for _ in range(4):  # one minute of 15 s ticks
+        await w.ensure_universe(TODAY)
+        now[0] += 15
+    assert len(calls) == 1
+    await w.ensure_universe(TODAY)
+    assert len(calls) == 2 and w.universe.isins == set()

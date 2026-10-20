@@ -13,6 +13,8 @@ import asyncio
 import contextlib
 import signal
 import socket
+import time
+from collections.abc import Callable
 from datetime import date, timedelta
 
 import redis.asyncio as aioredis
@@ -65,6 +67,8 @@ from tbo_technical_engine.store.research_cache import ResearchCache
 from tbo_technical_engine.utils.redis import connect_redis
 
 log = get_logger(__name__)
+UNIVERSE_RETRY_SECONDS = 60.0
+"""How long the worker waits before asking the fundamental engine for today's universe again after a miss."""
 TICK_SECONDS = 15
 
 
@@ -88,6 +92,9 @@ class SignalWorker:
         self.redis = redis
         self.sessions = sessions
         self.funds = funds
+        self.monotonic: Callable[[], float] = time.monotonic
+        self._universe_retry_at = 0.0
+        """No REST read of the universe before this (monotonic): after a miss, once a minute (review 9.26)."""
         self.buffer = CandleBuffer()
         self.readiness = Readiness()
         self.universe = UniverseHolder()
@@ -163,6 +170,11 @@ class SignalWorker:
         snapshot = self.universe.snapshot
         if snapshot is not None and snapshot.trade_date == today.isoformat():
             return
+        # On a holiday, or while the fundamental engine is late, there is no universe for today: asking on every 15 s
+        # tick cost about 5,760 calls a day, each a rate-limit token of the engine; once a minute is enough.
+        if self.monotonic() < self._universe_retry_at:
+            return
+        self._universe_retry_at = self.monotonic() + UNIVERSE_RETRY_SECONDS
         try:
             fetched = await self.funds.universe(today)
         except UpstreamUnavailable as exc:
