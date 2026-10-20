@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-import redis.asyncio as aioredis
 from tbo_platform_kit.calendar import now_utc
 from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.db import create_engine, session_factory
@@ -18,6 +17,7 @@ from tbo_technical_engine.services.market_calendar import build_calendar
 from tbo_technical_engine.services.platform_signals import process_signals
 from tbo_technical_engine.services.snapshot_service import Kind, SnapshotService, Summary
 from tbo_technical_engine.services.swing_loader import load_swing
+from tbo_technical_engine.utils.redis import connect_redis
 
 
 async def run_job(
@@ -30,7 +30,7 @@ async def run_job(
     assert settings.fundamental_url is not None
     params = load_swing(settings.swing_file)
     signals = signals or process_signals(settings)
-    redis = aioredis.Redis.from_url(settings.redis_url.get_secret_value())
+    redis = connect_redis(settings.redis_url.get_secret_value())
     engine = create_engine(settings)
     tokens = IssuerTokenProvider.from_settings(settings)
     feed_http = ServiceClient(

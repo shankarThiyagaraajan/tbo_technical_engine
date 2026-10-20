@@ -61,6 +61,7 @@ from tbo_technical_engine.services.supervisor import WarmupSupervisor
 from tbo_technical_engine.services.universe import UniverseHolder
 from tbo_technical_engine.services.warmup import WarmupSpec
 from tbo_technical_engine.store.research_cache import ResearchCache
+from tbo_technical_engine.utils.redis import connect_redis
 
 log = get_logger(__name__)
 TICK_SECONDS = 15
@@ -227,7 +228,7 @@ async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
     assert settings.redis_url is not None
     assert settings.market_feed_url is not None
     assert settings.fundamental_url is not None
-    redis = aioredis.Redis.from_url(settings.redis_url.get_secret_value())
+    redis = connect_redis(settings.redis_url.get_secret_value())
     engine = create_engine(settings)
     tokens = IssuerTokenProvider.from_settings(settings)
     feed_http = ServiceClient(
