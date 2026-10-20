@@ -59,7 +59,7 @@ class Candle:
     Kept compact because the signal worker holds about 950,000 of them at 500 stocks (review 9.20): slots, the stock
     and timeframe strings interned, and each price stored as an integer coefficient and an exponent instead of a
     `Decimal` object. Reading `open`, `high`, `low` or `close` gives the same `Decimal` the feed sent (same digits,
-    same exponent), so every result computed from a candle is unchanged. About 330 bytes a candle, against 1,570 as
+    same exponent), so every result computed from a candle is unchanged. About 400 bytes a candle, against 1,570 as
     a pydantic model. Immutable and hashable, like the frozen model it replaces.
     """
 
