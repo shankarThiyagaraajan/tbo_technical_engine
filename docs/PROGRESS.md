@@ -210,3 +210,7 @@ read-only, no code change. The fundamental engine is read through `GET /v1/unive
 ## Stock profile T1: 12-month return (2026-10-18)
 
 The daily snapshot carries `return_12m_pct`: the last close against the close 250 sessions earlier, from the same adjusted daily candles as the 20 and 60 day returns (`swing/analysis.return_12m`). With 250 sessions or fewer it is null, never 0 (a flat year is a real 0.00). The history read (400 calendar days, about 275 sessions) is enough. The contract pin is raised to 1.14.3 (`46d2aec`) and `contract/openapi.json` is re-vendored. Stored snapshots change their content hash once, so the next daily run re-announces them with the new field. Feeds the stock profile's peer comparison.
+
+## Stock master check (stage S3c, 2026-10-20)
+
+Read-only check, no code change. The engine keeps no stock master of its own and reads none: the universe and the gate come from the fundamental engine's API (`GET /v1/universe`, `GET /v1/gate`), candles and feed status from the market feed's API, and nothing reads a name, symbol, sector or index membership. Its tables (`indicator_snapshot`, `technical_snapshot`, `signal_candidate`, `swing_setup`, `backtest_trade` and the rest) are high-volume derived results, which the user_data plan (1a.6) lists as written exceptions to the `market_data` foreign keys. Nothing to switch in S3c or S3d. The index and India VIX producer work (market feed) is where this engine next reads shared market data.
