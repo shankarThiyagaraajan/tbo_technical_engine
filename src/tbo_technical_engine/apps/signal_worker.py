@@ -28,6 +28,7 @@ from tbo_signals import Signals
 
 from tbo_technical_engine import outbox
 from tbo_technical_engine.clients import fundamental, market_feed
+from tbo_technical_engine.config import latency as latency_cfg
 from tbo_technical_engine.config.settings import REPOSITORY, Settings
 from tbo_technical_engine.consumers.handlers import (
     calendar_consumer,
@@ -101,7 +102,7 @@ class SignalWorker:
             now_utc,
             max_age=timedelta(seconds=settings.max_candle_age_seconds),
         )
-        self.tracker = LatencyTracker(calendar, now_utc)
+        self.tracker = LatencyTracker(calendar, now_utc, grace=boundary_grace(settings.max_candle_age_seconds))
         self.ingest.tracker = self.tracker
         self.ingest.signals = signals
         self.latency = LatencyRecorder(sessions)
@@ -219,6 +220,12 @@ class SignalWorker:
         for task in tasks:
             await task
         log.info("signal_worker_stopped")
+
+
+def boundary_grace(max_candle_age_seconds: int) -> timedelta:
+    """How long a boundary waits for late candles: never less than the age up to which a candle is still evaluated,
+    or a candle 31 to 120 s late is evaluated and also written as `absent` (review 9.26)."""
+    return max(latency_cfg.BOUNDARY_GRACE, timedelta(seconds=max_candle_age_seconds))
 
 
 async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
