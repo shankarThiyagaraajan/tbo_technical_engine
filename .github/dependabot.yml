@@ -1,0 +1,60 @@
+# Dependabot: weekly version updates (Monday 06:00 IST) and grouped security updates, opened against main.
+# Only the ecosystems this repository uses are listed. The matching local check is `make audit`.
+version: 2
+updates:
+  # Python (pyproject.toml + uv.lock)
+  - package-ecosystem: "uv"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    allow:
+      - dependency-type: "all"        # direct AND indirect, dev groups included
+    open-pull-requests-limit: 10
+    cooldown:                         # never delays security updates
+      default-days: 5
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+        patterns: ["*"]
+    labels: ["dependencies", "python"]
+    assignees: ["shankarThiyagaraajan"]
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Image tags in compose files
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      timezone: "Asia/Kolkata"
+    groups:
+      compose:
+        patterns: ["*"]
+    labels: ["dependencies", "docker"]
+    assignees: ["shankarThiyagaraajan"]
+
+  # Pinned actions (kept current for when CI returns)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "monthly"
+      timezone: "Asia/Kolkata"
+    groups:
+      actions:
+        patterns: ["*"]
+    labels: ["dependencies", "ci"]
