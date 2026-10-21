@@ -259,7 +259,7 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   bandit, pip-audit, pytest with an 80 percent coverage floor (94.7 percent at the time); `.pre-commit-config.yaml` runs
   ruff, ruff format and mypy. Found and fixed: 45 mypy errors in tests (generics, unused ignores, loose dict types), 9
   packages without a docstring, three comprehension nits. pip-audit: pytest 8.4.2 (PYSEC-2026-1845, dev-only) ignored
-  with a reason because the fix needs pytest 9 and pytest-asyncio 1.x. Bandit: B101 skipped (as ruff S101), B104 marked.
+  with a reason because the fix needs pytest 9 and pytest-asyncio 1.x (fixed 2026-10-21: pytest 9.1.1, pytest-asyncio 1.4.0, no ignore). Bandit: B101 skipped (as ruff S101), B104 marked.
 
 ## Stock profile check (stage V1, 2026-10-18)
 
