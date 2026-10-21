@@ -3,6 +3,7 @@
     uv run python -m scripts.benchmark replay --stocks 20 --sessions 60
     uv run python -m scripts.benchmark sweep  --stocks 10 --sessions 150
     uv run python -m scripts.benchmark live   --stocks 500 --boundaries 12     # needs PostgreSQL and Redis, see below
+    uv run python -m scripts.benchmark memory --stocks 500
 
 `replay`: seconds per stock-session for one parameter set (the tape plus one replay).
 `sweep`: a full study of every active strategy with its parameter grid; the projection to a year of 500 stocks is a
@@ -16,6 +17,10 @@ to build and publish the candle and the network, which only a real session can m
 TBO_TECHNICAL_DATABASE_URL and TBO_TECHNICAL_REDIS_URL of a database migrated with `alembic upgrade head`; it writes
 (and deletes at the start) rows in the `technical` schema, so point it at a scratch database.
 
+`memory`: the candle buffer filled to capacity (1,900 candles a stock) for `--stocks`: bytes per candle as Python
+traces them, the projection to 500 stocks, and this process's peak RSS against the signal worker's 1 GB limit
+(review 9.20; on 2026-10-20 about 400 bytes a candle and 380 MB for 500 stocks, was 1,570 bytes and 1.5 GB).
+
 `--json` prints one JSON object (what `docs/adr/0001-profiling-and-numba.md` quotes).
 """
 
@@ -28,6 +33,7 @@ import json
 import os
 import platform
 import pstats
+import resource
 import statistics
 import sys
 import tempfile
@@ -49,6 +55,7 @@ from tbo_technical_engine.services.strategy_loader import load_strategies
 from tbo_technical_engine.store.research_cache import ResearchCache
 from tbo_technical_engine.synthetic.cache import fill_cache
 from tbo_technical_engine.synthetic.generate import StockCandles, session_open_utc, stock_candles, weekdays_ending
+from tbo_technical_engine.synthetic.memory import fill, held, measure
 from tbo_technical_engine.utils.timefmt import z
 from tbo_technical_engine.utils.timeframes import length
 
@@ -281,6 +288,28 @@ async def live_mode(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def memory_mode(args: argparse.Namespace) -> dict[str, Any]:
+    """The buffer at capacity: this process's RSS before and after filling it (no tracing, so the figure is what the
+    kernel counts against the container's limit), then traced bytes per candle on a small sample."""
+    base_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # Linux reports kilobytes
+    buffer = fill(args.stocks, seed=args.seed)
+    peak_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+    candles = held(buffer, args.stocks)
+    del buffer
+    _, sample = measure(min(args.stocks, 5), seed=args.seed)
+    return {
+        "mode": "memory",
+        "stocks": args.stocks,
+        "candles": candles,
+        "rss_base_mb": round(base_mb),
+        "rss_peak_mb": round(peak_mb),
+        "rss_buffer_mb": round(peak_mb - base_mb),
+        "traced_bytes_per_candle": round(sample.bytes_per_candle),
+        "traced_buffer_mb_at_500_stocks": round(sample.projected_mb(500)),
+        "limit_mb": 1024,
+    }
+
+
 def _day(candle: Candle) -> date:
     return candle.start_at.astimezone(IST).date()
 
@@ -295,7 +324,7 @@ async def _count(sessions: Any) -> int:
 def main(argv: list[str] | None = None) -> int:
     """Run one mode and print the result."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("mode", choices=["replay", "sweep", "live"])
+    ap.add_argument("mode", choices=["replay", "sweep", "live", "memory"])
     ap.add_argument("--stocks", type=int, default=20)
     ap.add_argument("--sessions", type=int, default=60)
     ap.add_argument("--warmup", type=int, default=15, help="sessions before the measured range (indicator warm-up)")
@@ -317,6 +346,8 @@ def main(argv: list[str] | None = None) -> int:
         result = replay_mode(args)
     elif args.mode == "sweep":
         result = sweep_mode(args)
+    elif args.mode == "memory":
+        result = memory_mode(args)
     else:
         result = asyncio.run(live_mode(args))
     result["machine"] = machine()

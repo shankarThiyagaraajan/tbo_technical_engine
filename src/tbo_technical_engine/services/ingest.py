@@ -79,7 +79,7 @@ class CandleIngest:
     async def handle(self, event: dict[str, Any], session: AsyncSession | None) -> None:
         """The EventConsumer handler for `tbo.market_feed.candle.closed.v1`. Idempotent: a redelivery is not stored
         twice, so it is not evaluated twice either."""
-        candle = Candle.model_validate(event["data"])
+        candle = Candle.from_message(event["data"])
         if candle.timeframe not in STORED_TIMEFRAMES or candle.isin not in self.universe:
             return
         if not self.buffer.add(candle):

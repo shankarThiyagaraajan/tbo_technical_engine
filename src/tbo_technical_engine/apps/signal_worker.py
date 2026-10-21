@@ -13,6 +13,8 @@ import asyncio
 import contextlib
 import signal
 import socket
+import time
+from collections.abc import Callable
 from datetime import date, timedelta
 
 import redis.asyncio as aioredis
@@ -28,6 +30,7 @@ from tbo_signals import Signals
 
 from tbo_technical_engine import outbox
 from tbo_technical_engine.clients import fundamental, market_feed
+from tbo_technical_engine.config import latency as latency_cfg
 from tbo_technical_engine.config.settings import REPOSITORY, Settings
 from tbo_technical_engine.consumers.handlers import (
     calendar_consumer,
@@ -61,8 +64,11 @@ from tbo_technical_engine.services.supervisor import WarmupSupervisor
 from tbo_technical_engine.services.universe import UniverseHolder
 from tbo_technical_engine.services.warmup import WarmupSpec
 from tbo_technical_engine.store.research_cache import ResearchCache
+from tbo_technical_engine.utils.redis import connect_redis
 
 log = get_logger(__name__)
+UNIVERSE_RETRY_SECONDS = 60.0
+"""How long the worker waits before asking the fundamental engine for today's universe again after a miss."""
 TICK_SECONDS = 15
 
 
@@ -86,6 +92,9 @@ class SignalWorker:
         self.redis = redis
         self.sessions = sessions
         self.funds = funds
+        self.monotonic: Callable[[], float] = time.monotonic
+        self._universe_retry_at = 0.0
+        """No REST read of the universe before this (monotonic): after a miss, once a minute (review 9.26)."""
         self.buffer = CandleBuffer()
         self.readiness = Readiness()
         self.universe = UniverseHolder()
@@ -100,7 +109,7 @@ class SignalWorker:
             now_utc,
             max_age=timedelta(seconds=settings.max_candle_age_seconds),
         )
-        self.tracker = LatencyTracker(calendar, now_utc)
+        self.tracker = LatencyTracker(calendar, now_utc, grace=boundary_grace(settings.max_candle_age_seconds))
         self.ingest.tracker = self.tracker
         self.ingest.signals = signals
         self.latency = LatencyRecorder(sessions)
@@ -161,6 +170,11 @@ class SignalWorker:
         snapshot = self.universe.snapshot
         if snapshot is not None and snapshot.trade_date == today.isoformat():
             return
+        # On a holiday, or while the fundamental engine is late, there is no universe for today: asking on every 15 s
+        # tick cost about 5,760 calls a day, each a rate-limit token of the engine; once a minute is enough.
+        if self.monotonic() < self._universe_retry_at:
+            return
+        self._universe_retry_at = self.monotonic() + UNIVERSE_RETRY_SECONDS
         try:
             fetched = await self.funds.universe(today)
         except UpstreamUnavailable as exc:
@@ -220,6 +234,12 @@ class SignalWorker:
         log.info("signal_worker_stopped")
 
 
+def boundary_grace(max_candle_age_seconds: int) -> timedelta:
+    """How long a boundary waits for late candles: never less than the age up to which a candle is still evaluated,
+    or a candle 31 to 120 s late is evaluated and also written as `absent` (review 9.26)."""
+    return max(latency_cfg.BOUNDARY_GRACE, timedelta(seconds=max_candle_age_seconds))
+
+
 async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
     """Build the worker from settings and run it until `stop`; every connection it opened is closed on the way out."""
     settings = settings or Settings()
@@ -227,7 +247,7 @@ async def run(stop: asyncio.Event, settings: Settings | None = None) -> None:
     assert settings.redis_url is not None
     assert settings.market_feed_url is not None
     assert settings.fundamental_url is not None
-    redis = aioredis.Redis.from_url(settings.redis_url.get_secret_value())
+    redis = connect_redis(settings.redis_url.get_secret_value())
     engine = create_engine(settings)
     tokens = IssuerTokenProvider.from_settings(settings)
     feed_http = ServiceClient(

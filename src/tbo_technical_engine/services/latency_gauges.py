@@ -20,6 +20,7 @@ from tbo_platform_kit.metrics import Metrics
 
 from tbo_technical_engine.config import latency as cfg
 from tbo_technical_engine.schemas.latency import BoundaryLatency
+from tbo_technical_engine.services.latency import regular_window
 from tbo_technical_engine.store import latency as store
 
 log = get_logger(__name__)
@@ -45,7 +46,9 @@ class LatencyGauges:
             "evaluation_slow_boundaries_today", "count", "Boundaries today whose p95 was over the 2 s target."
         )
         self.session_day = metrics.gauge(
-            "evaluation_session_day", "count", "1 when today is a trading day (the alert rules only watch those)."
+            "evaluation_session_day",
+            "count",
+            "1 when today has a regular session (the alert rules only watch those).",
         )
         self.refreshed = metrics.gauge(
             "evaluation_gauges_refreshed", "seconds", "Unix time these gauges were last refreshed from the database."
@@ -85,7 +88,9 @@ async def refresh_forever(
             now = clock()
             async with sessions() as session:
                 rows = await store.for_day(session, now.astimezone(IST).date())
-            gauges.update(rows, now, trading_day=calendar.is_trading_day(now.astimezone(IST).date()))
+            # A special session is not watched: it has no boundary rows (review 9.22, `regular_window`).
+            regular = regular_window(calendar, now.astimezone(IST).date()) is not None
+            gauges.update(rows, now, trading_day=regular)
         except Exception as exc:
             log.error("evaluation_gauges_refresh_failed", error=type(exc).__name__)
         with contextlib.suppress(TimeoutError):

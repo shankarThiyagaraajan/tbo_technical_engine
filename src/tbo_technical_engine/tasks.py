@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 from datetime import date, timedelta
 
-import redis.asyncio as aioredis
 from celery import Task
 from tbo_platform_kit.calendar import now_utc
 from tbo_platform_kit.celery_app import create_celery, crontab_ist, every, queue_name, research_task
@@ -31,6 +30,7 @@ from tbo_technical_engine.services.strategy_loader import load_strategies
 from tbo_technical_engine.store import backtests as backtest_store
 from tbo_technical_engine.store import indicators as indicator_store
 from tbo_technical_engine.store.research_cache import ResearchCache
+from tbo_technical_engine.utils.redis import connect_redis
 
 log = get_logger(__name__)
 settings = Settings()
@@ -67,7 +67,7 @@ REQUEUE_AFTER = timedelta(minutes=5)
 async def _flush() -> int:
     assert settings.redis_url is not None
     engine = create_engine(settings)
-    redis = aioredis.Redis.from_url(settings.redis_url.get_secret_value())
+    redis = connect_redis(settings.redis_url.get_secret_value())
     try:
         publisher = EventPublisher(redis, settings.profile, source=REPOSITORY)
         return await outbox.flush(session_factory(engine), publisher, process_signals(settings))

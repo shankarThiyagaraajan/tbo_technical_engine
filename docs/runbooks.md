@@ -3,7 +3,9 @@
 Each section is what to do when the alert of the same name fires. Everything below was rehearsed as a drill in
 `tests/drills/` against a real PostgreSQL and Redis; the tests say what the engine does, and these pages say what to do.
 
-First look, always: `uv run python -m scripts.session_report --days 1` and the `evaluation_boundary` rows of today.
+First look, always: `docker compose exec technical_worker python -m tbo_technical_engine.apps.session_report --days 1`
+(from a checkout: `uv run python -m tbo_technical_engine.apps.session_report --days 1`) and the `evaluation_boundary` rows
+of today. The operating tools live in the package so the image has them (review 9.21); `scripts/` holds the dev tools.
 
 ## TechnicalEvaluationsMissed
 

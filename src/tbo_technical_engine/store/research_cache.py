@@ -63,6 +63,25 @@ class ResearchCache:
             return None
         return StockData(five, self.candles(isin, "15m"), self.candles(isin, "1d"))
 
+    def daily_closes(self, isin: str) -> dict[date, float]:
+        """The cached daily close of each IST session (what an adjusted read is compared with, review 9.23)."""
+        file = self.path(isin, "1d")
+        if not file.exists():
+            return {}
+        frame = pl.read_parquet(file, columns=["start_at", "close"])
+        return {s.astimezone(IST).date(): float(c) for s, c in frame.iter_rows()}
+
+    def drop(self, isin: str) -> list[str]:
+        """Delete every cached timeframe of a stock; returns the timeframes that had a file."""
+        gone: list[str] = []
+        if self.root.exists():
+            for folder in sorted(p for p in self.root.iterdir() if p.is_dir() and p.name != "indices"):
+                file = folder / f"{isin}.parquet"
+                if file.exists():
+                    file.unlink()
+                    gone.append(folder.name)
+        return gone
+
     def session_dates(self, isin: str, timeframe: str) -> set[date]:
         """The IST dates that have at least one cached candle; reads the one column only (coverage reports)."""
         file = self.path(isin, timeframe)

@@ -9,7 +9,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-import redis.asyncio as aioredis
 from fastapi import FastAPI
 from tbo_platform_kit.calendar import now_utc
 from tbo_platform_kit.db import create_engine, session_factory
@@ -26,6 +25,7 @@ from tbo_technical_engine.services.market_calendar import build_calendar
 from tbo_technical_engine.services.platform_signals import build_signals
 from tbo_technical_engine.services.strategy_loader import load_strategies
 from tbo_technical_engine.store.tables import metadata
+from tbo_technical_engine.utils.redis import connect_redis
 
 
 def build_app(settings: Settings | None = None, *, verifier: Verifier | None = None) -> FastAPI:
@@ -37,7 +37,7 @@ def build_app(settings: Settings | None = None, *, verifier: Verifier | None = N
     assert settings.redis_url is not None
     profile = settings.profile
     engine = create_engine(settings)
-    redis = aioredis.Redis.from_url(settings.redis_url.get_secret_value())
+    redis = connect_redis(settings.redis_url.get_secret_value())
     metrics = Metrics(settings.short_name, settings.version, profile.mode.value)
 
     gauges = LatencyGauges(metrics)
