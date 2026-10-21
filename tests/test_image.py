@@ -30,12 +30,14 @@ def test_every_copy_source_in_the_dockerfile_is_let_through_by_dockerignore() ->
     for line in (ROOT / "Dockerfile").read_text().splitlines():
         if line.startswith("COPY ") and "--from=" not in line:
             sources += line.split()[1:-1]
-    assert sources and [s for s in sources if not _allowed(s.rstrip("/"), rules)] == []
+    assert sources
+    assert [s for s in sources if not _allowed(s.rstrip("/"), rules)] == []
 
 
 def test_the_package_is_installed_into_the_image_and_carries_the_operating_tools() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text()
-    assert "COPY src src" in dockerfile and "--no-editable" in dockerfile
+    assert "COPY src src" in dockerfile
+    assert "--no-editable" in dockerfile
     for tool in OPERATING_TOOLS:
         module = importlib.import_module(f"tbo_technical_engine.apps.{tool}")
         assert callable(module.main)

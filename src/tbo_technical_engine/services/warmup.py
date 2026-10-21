@@ -87,6 +87,43 @@ def _write(cache: ResearchCache | None, isin: str, timeframe: str, candles: list
         log.warning("research_cache_write_failed", isin=isin, timeframe=timeframe, error=type(exc).__name__)
 
 
+async def _load(
+    client: MarketFeedClient,
+    buffer: CandleBuffer,
+    cache: ResearchCache | None,
+    isin: str,
+    now: datetime,
+    calendar: TradingCalendar,
+    spec: WarmupSpec,
+) -> None:
+    """Read one stock's history for every timeframe and merge it into the buffer."""
+    today = now.astimezone(IST).date()
+    # Daily first: its adjusted read gives the factors that put the intraday candles on the same scale (9.23).
+    order = sorted(spec.sessions, key=lambda tf: tf not in ADJUSTED_TIMEFRAMES)
+    intraday = [n for tf, n in spec.sessions.items() if tf not in ADJUSTED_TIMEFRAMES]
+    raw_daily: list[Candle] = []
+    if intraday and "1d" in spec.sessions:  # the raw daily closes of the intraday window
+        since = window_start(calendar, today, max(intraday))
+        raw_daily = [c async for c in client.candles(isin, "1d", since, now)]
+    factors: dict[date, Decimal] = {}
+    for tf in order:
+        start = window_start(calendar, today, spec.sessions[tf])
+        # Daily candles are read split- and bonus-adjusted, so the daily ATR has no gap in it (9.5), and
+        # intraday ones are rescaled to match (9.23): one price scale across timeframes.
+        fetched: list[Candle] = [
+            c async for c in client.candles(isin, tf, start, now, adjusted=tf in ADJUSTED_TIMEFRAMES)
+        ]
+        if tf in ADJUSTED_TIMEFRAMES:
+            factors = session_factors(raw_daily, fetched)
+            _rebase(cache, isin, fetched)
+        else:
+            fetched = adjust(fetched, factors)
+            if factors:  # a split inside the window: older buffered candles are on the old scale
+                buffer.forget_before(isin, tf, start)
+        buffer.add_many(fetched, replace=True)
+        _write(cache, isin, tf, fetched)
+
+
 async def warm_up(
     client: MarketFeedClient,
     buffer: CandleBuffer,
@@ -99,38 +136,13 @@ async def warm_up(
     concurrency: int = 8,
 ) -> WarmupResult:
     """Read history for every stock and merge it into the buffer (live candles already there are kept)."""
-    today = now.astimezone(IST).date()
     gate = asyncio.Semaphore(concurrency)
     result = WarmupResult()
-
-    # Daily first: its adjusted read gives the factors that put the intraday candles on the same scale (9.23).
-    order = sorted(spec.sessions, key=lambda tf: tf not in ADJUSTED_TIMEFRAMES)
-    intraday = [n for tf, n in spec.sessions.items() if tf not in ADJUSTED_TIMEFRAMES]
 
     async def one(isin: str) -> None:
         async with gate:
             try:
-                raw_daily: list[Candle] = []
-                if intraday and "1d" in spec.sessions:  # the raw daily closes of the intraday window
-                    since = window_start(calendar, today, max(intraday))
-                    raw_daily = [c async for c in client.candles(isin, "1d", since, now)]
-                factors: dict[date, Decimal] = {}
-                for tf in order:
-                    start = window_start(calendar, today, spec.sessions[tf])
-                    # Daily candles are read split- and bonus-adjusted, so the daily ATR has no gap in it (9.5), and
-                    # intraday ones are rescaled to match (9.23): one price scale across timeframes.
-                    fetched: list[Candle] = [
-                        c async for c in client.candles(isin, tf, start, now, adjusted=tf in ADJUSTED_TIMEFRAMES)
-                    ]
-                    if tf in ADJUSTED_TIMEFRAMES:
-                        factors = session_factors(raw_daily, fetched)
-                        _rebase(cache, isin, fetched)
-                    else:
-                        fetched = adjust(fetched, factors)
-                        if factors:  # a split inside the window: older buffered candles are on the old scale
-                            buffer.forget_before(isin, tf, start)
-                    buffer.add_many(fetched, replace=True)
-                    _write(cache, isin, tf, fetched)
+                await _load(client, buffer, cache, isin, now, calendar, spec)
             except UpstreamUnavailable as exc:
                 log.warning("warmup_failed", isin=isin, error=str(exc)[:200])
         (result.warm if is_warm(buffer, isin, spec) else result.cold).add(isin)

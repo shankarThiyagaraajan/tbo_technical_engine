@@ -41,7 +41,7 @@ async def run(args: argparse.Namespace, settings: Settings) -> int:
     )
     fund_http: ServiceClient | None = None
     try:
-        isins: list[str] = [] if args.isins == "none" else args.isins.split(",") if args.isins else []
+        isins: list[str] = args.isins.split(",") if args.isins and args.isins != "none" else []
         if not isins and args.isins != "none":
             settings.require("fundamental_url")
             assert settings.fundamental_url is not None

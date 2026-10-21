@@ -52,7 +52,9 @@ def test_the_session_report_exits_0_only_with_ten_clean_sessions(
     monkeypatch.setattr(session_report, "build_calendar", lambda _s: calendar)
     monkeypatch.setattr(session_report, "build", build)
     assert session_report.main(["--days", str(days), "--date", "2026-10-16"]) == code
-    assert calendar.refreshed and len(seen[0]) == days and seen[0][-1] == date(2026, 10, 16)
+    assert calendar.refreshed
+    assert len(seen[0]) == days
+    assert seen[0][-1] == date(2026, 10, 16)
     assert date(2026, 10, 2) not in seen[0]  # a holiday
     assert f"consecutive clean sessions: {days} of 10" in capsys.readouterr().out
 
@@ -96,12 +98,13 @@ def test_the_fill_takes_the_universe_and_the_indices_and_reports_failures(
     monkeypatch.setattr("tbo_technical_engine.clients.fundamental.FundamentalClient", Funds)
     monkeypatch.setattr(fill_research_cache, "fill_cache", fill)
     monkeypatch.setattr(fill_research_cache, "fill_index_cache", fill_indices)
-    Http.closed = 0
+    monkeypatch.setattr(Http, "closed", 0)
     code = fill_research_cache.main(["--from", "2026-09-01", "--to", "2026-09-30", "--indices", "nifty_50"])
     assert code == 1  # a stock failed
     assert calls == {"isins": ["INE1", "INE2"], "timeframes": ["5m", "15m", "1d"], "indices": ["nifty_50"]}
     out = capsys.readouterr()
-    assert "2 stocks, 15 candles, 1 failed" in out.out and "failed: INE2" in out.err
+    assert "2 stocks, 15 candles, 1 failed" in out.out
+    assert "failed: INE2" in out.err
     assert Http.closed == 2
 
 

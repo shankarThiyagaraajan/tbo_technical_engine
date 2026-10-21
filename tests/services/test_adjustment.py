@@ -96,7 +96,8 @@ def test_a_split_in_the_middle_of_the_cache_replays_like_no_split_at_all(tmp_pat
 
     split = [key(c) for c in replay_stock(CONFIG, data.five, data.fifteen, data.daily, FIRST, LAST)]
     unsplit = [key(c) for c in replay_stock(CONFIG, FIVE, FIFTEEN, DAILY, FIRST, LAST)]
-    assert split == unsplit and split  # the strategies fire, and identically
+    assert split  # the strategies fire
+    assert split == unsplit  # and identically
 
 
 def test_a_cache_written_before_the_split_is_dropped_not_mixed(tmp_path: Path) -> None:
@@ -134,7 +135,8 @@ def test_a_newer_revision_is_never_replaced_by_an_older_one() -> None:
     buffer = CandleBuffer()
     newer = FIVE[0].model_copy(update={"revision": 2, "close": FIVE[0].close + 1})
     buffer.add(newer)
-    assert buffer.add(FIVE[0], replace=True) is False and buffer.last(ISIN_A, "5m") == newer
+    assert buffer.add(FIVE[0], replace=True) is False
+    assert buffer.last(ISIN_A, "5m") == newer
     assert buffer.add(newer, replace=True) is False  # the same copy changes nothing
     assert buffer.add(newer.model_copy(update={"close": newer.close + 1}), replace=True) is True
     assert buffer.add(newer, replace=False) is False

@@ -31,9 +31,9 @@ async def test_reads_the_universe_over_rest_when_the_stream_has_not_given_it(
     monkeypatch.setenv("TBO_MODE", "lab")
     w = worker(redis, sessions)
     await w.ensure_universe(TODAY)
-    assert (
-        w.universe.isins == {ISIN_A} and w.universe.snapshot is not None and w.universe.snapshot.universe_version == 3
-    )
+    assert w.universe.isins == {ISIN_A}
+    assert w.universe.snapshot is not None
+    assert w.universe.snapshot.universe_version == 3
 
 
 async def test_keeps_the_last_universe_when_the_fundamental_engine_is_down(

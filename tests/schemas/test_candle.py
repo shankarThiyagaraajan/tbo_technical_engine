@@ -50,14 +50,16 @@ def test_the_wire_form_is_still_validated() -> None:
         Candle.from_message({**WIRE, "timeframe": "7m"})
     with pytest.raises(ValidationError):
         Candle.from_message({**WIRE, "close": "NaN"})
+    infinite = {**Candle.from_message(WIRE).as_dict(), "close": Decimal("Infinity")}
     with pytest.raises(ValueError, match="finite"):
-        Candle(**{**Candle.from_message(WIRE).as_dict(), "close": Decimal("Infinity")})
+        Candle(**infinite)
 
 
 def test_equal_by_value_hashable_and_immutable() -> None:
     a = Candle.from_message(WIRE)
     b = Candle.from_message({**WIRE, "open": "1245.5"})
-    assert a == b and hash(a) == hash(b)  # 1245.50 == 1245.5, as the pydantic model compared them
+    assert a == b  # 1245.50 == 1245.5, as the pydantic model compared them
+    assert hash(a) == hash(b)
     assert a != Candle.from_message({**WIRE, "close": "1249.90"})
     assert a != Candle.from_message({**WIRE, "revision": 3})
     assert len({a, b}) == 1
@@ -81,4 +83,5 @@ def test_copies_pickles_and_dumps_like_the_model() -> None:
 def test_stock_and_timeframe_strings_are_shared_between_candles() -> None:
     a = Candle.from_message(WIRE)
     b = Candle.from_message({**WIRE, "start_at": "2026-10-15T03:50:00Z"})
-    assert a.isin is b.isin and a.timeframe is b.timeframe
+    assert a.isin is b.isin
+    assert a.timeframe is b.timeframe

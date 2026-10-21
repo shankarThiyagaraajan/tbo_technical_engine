@@ -64,13 +64,15 @@ class Clock:
 def test_the_window_is_the_calendars_and_a_special_session_has_none() -> None:
     assert regular_window(CALENDAR, USUAL) == (ist(USUAL, 9, 15), ist(USUAL, 15, 30))
     assert regular_window(CALENDAR, DELAYED) == (ist(DELAYED, 10, 15), ist(DELAYED, 15, 30))
-    assert CALENDAR.is_trading_day(MUHURAT) and regular_window(CALENDAR, MUHURAT) is None
+    assert CALENDAR.is_trading_day(MUHURAT)
+    assert regular_window(CALENDAR, MUHURAT) is None
     assert regular_window(CALENDAR, date(2026, 10, 17)) is None  # an ordinary Saturday
 
 
 def test_a_delayed_open_moves_the_first_boundary() -> None:
     boundaries = session_boundaries(DELAYED, regular_window(CALENDAR, DELAYED))
-    assert boundaries[0] == ist(DELAYED, 10, 20) and boundaries[-1] == ist(DELAYED, 15, 30)
+    assert boundaries[0] == ist(DELAYED, 10, 20)
+    assert boundaries[-1] == ist(DELAYED, 15, 30)
     assert len(boundaries) == 63 == trading_day_boundaries(DELAYED, regular_window(CALENDAR, DELAYED))
     assert session_boundaries(USUAL, regular_window(CALENDAR, USUAL)) == session_boundaries(USUAL)
 
@@ -102,7 +104,8 @@ def test_the_session_report_counts_a_delayed_session_against_its_own_boundaries(
 
 def test_the_clean_sessions_streak_skips_a_special_session() -> None:
     days = trading_days_ending(CALENDAR, date(2026, 11, 9), 3)
-    assert MUHURAT not in days and days == [date(2026, 11, 5), date(2026, 11, 6), date(2026, 11, 9)]
+    assert MUHURAT not in days
+    assert days == [date(2026, 11, 5), date(2026, 11, 6), date(2026, 11, 9)]
 
 
 def supervisor(now: datetime) -> WarmupSupervisor:
