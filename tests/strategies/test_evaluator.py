@@ -6,7 +6,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.schemas.signal import SignalCandidate
 from tbo_technical_engine.schemas.strategy import StrategyFile
@@ -179,3 +179,41 @@ def test_an_inactive_strategy_is_silent(baseline: list[SignalCandidate]) -> None
 
 def test_candidates_carry_the_params_version(baseline: list[SignalCandidate]) -> None:
     assert {c.params_version for c in baseline} == {CONFIG.params_version}
+
+
+def _halved(history: History, day: int) -> list[Any]:
+    """The session of `day` with every price halved: a 1:2 split on its ex-date (intraday candles are unadjusted)."""
+    half = {"open", "high", "low", "close"}
+    return [c.model_copy(update={k: getattr(c, k) / 2 for k in half}) for c in history.events(day)]
+
+
+def test_a_stock_on_its_split_date_is_not_evaluated() -> None:
+    """9.5: the previous session's pivots and gap are on the old price scale, so no candidate that day."""
+    assert run_days([14, 15]), "the control days do produce candidates"
+    buffer, evaluator = fresh(HISTORY.before(15))
+    assert drive(buffer, evaluator, _halved(HISTORY, 15)) == []
+
+
+def test_a_special_evening_session_is_not_the_base_of_the_gap() -> None:
+    """9.7: after a Muhurat hour, prev_close is the last regular close, not the evening's."""
+    last_regular = HISTORY.sessions[14][-1]
+    evening = [
+        last_regular.model_copy(
+            update={"start_at": last_regular.start_at + timedelta(hours=3) + timedelta(minutes=5 * i), "close": 1}
+        )
+        for i in range(12)
+    ]
+    buffer, evaluator = fresh([*HISTORY.before(15), *evening])
+    first = HISTORY.sessions[15][0]
+    buffer.add(first)
+    ctx = evaluator.context(first)
+    assert ctx is not None and ctx.prev_close == float(last_regular.close)
+
+
+def test_a_stock_that_left_the_universe_loses_its_cooldowns() -> None:
+    """9.13: the cooldown map must not grow with every stock ever seen."""
+    buffer, evaluator = fresh(HISTORY.before(15))
+    found = drive(buffer, evaluator, HISTORY.events(15))
+    assert found and evaluator.fired
+    evaluator.forget({found[0].isin})
+    assert all(k[0] != found[0].isin for k in evaluator.fired)

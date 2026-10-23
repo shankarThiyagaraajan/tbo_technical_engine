@@ -12,9 +12,9 @@ from typing import Any
 
 from tbo_platform_kit.mode import ModeProfile
 
+from tbo_technical_engine.config.settings import SHORT_NAME
 from tbo_technical_engine.schemas.signal import SignalCandidate
 from tbo_technical_engine.services.evaluator import FiredKey
-from tbo_technical_engine.settings import SHORT_NAME
 from tbo_technical_engine.utils.timefmt import parse_z, z
 from tbo_technical_engine.utils.timeframes import length
 
@@ -22,6 +22,12 @@ TTL = timedelta(hours=36)
 
 
 class CooldownStore:
+    """Reads and writes the checkpoint hash.
+
+    `redis` is typed `Any` on purpose: the `redis.asyncio.Redis` stubs type every call `Awaitable | value` (one
+    signature for sync and async clients), which strict mypy cannot `await`.
+    """
+
     def __init__(self, redis: Any, profile: ModeProfile) -> None:
         self.redis = redis
         self.prefix = f"{profile.stream_prefix}{SHORT_NAME}.strategy_state:"
@@ -48,6 +54,8 @@ class CooldownStore:
                 into[key] = at
 
     async def mark(self, candidate: SignalCandidate) -> None:
+        """Persist that a strategy fired for this stock and side. Best effort: if Redis is down the in-memory cooldown
+        still holds for this process."""
         try:
             key = self._key(candidate.isin)
             await self.redis.hset(

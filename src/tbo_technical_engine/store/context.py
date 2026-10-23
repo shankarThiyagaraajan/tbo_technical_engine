@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Row, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbo_technical_engine.schemas.context import MarketContext
-from tbo_technical_engine.tables import market_context as t
+from tbo_technical_engine.store.tables import market_context as t
 
 
 async def save(session: AsyncSession, at: datetime, context: MarketContext, created_at: datetime) -> bool:
@@ -30,12 +30,13 @@ async def save(session: AsyncSession, at: datetime, context: MarketContext, crea
     return (await session.execute(stmt)).first() is not None
 
 
-def _to_context(row: Any) -> dict[str, Any]:
+def _to_context(row: Row[Any]) -> dict[str, Any]:
     data: dict[str, Any] = row.data
     return data
 
 
 async def latest(session: AsyncSession) -> dict[str, Any] | None:
+    """The most recent stored market context as its JSON document, or None before the first one."""
     row = (await session.execute(select(t).order_by(t.c.context_at.desc()).limit(1))).first()
     return None if row is None else _to_context(row)
 

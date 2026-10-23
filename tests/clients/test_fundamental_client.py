@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 import httpx
 import pytest
@@ -30,10 +31,35 @@ async def test_not_published_yet_is_none() -> None:
 
 
 async def test_an_empty_page_is_none() -> None:
-    body = {"items": [], "next_cursor": None}
+    body: dict[str, Any] = {"items": [], "next_cursor": None}
     assert await fundamental_client(lambda r: httpx.Response(200, json=body)).universe() is None
 
 
 async def test_a_server_error_raises() -> None:
     with pytest.raises(UpstreamUnavailable):
         await fundamental_client(lambda r: httpx.Response(503)).universe(date(2026, 10, 15))
+
+
+def gate_row(isin: str, status: str) -> dict[str, object]:
+    return {"trade_date": "2026-10-15", "isin": isin, "status": status}
+
+
+async def test_the_gate_of_a_past_day_is_read_page_by_page() -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/gate" and request.url.params["date"] == "2026-10-15"
+        if request.url.params.get("cursor") is None:
+            return httpx.Response(200, json={"items": [gate_row(ISIN_A, "long_only")], "next_cursor": "c"})
+        return httpx.Response(200, json={"items": [gate_row(ISIN_B, "block")], "next_cursor": None})
+
+    assert await fundamental_client(handle).gate(date(2026, 10, 15)) == {ISIN_A: "long_only", ISIN_B: "block"}
+
+
+async def test_a_day_with_no_gate_run_is_none() -> None:
+    assert await fundamental_client(lambda r: httpx.Response(404)).gate(date(2026, 10, 15)) is None
+    empty: dict[str, Any] = {"items": [], "next_cursor": None}
+    assert await fundamental_client(lambda r: httpx.Response(200, json=empty)).gate(date(2026, 10, 15)) is None
+
+
+async def test_a_gate_server_error_raises() -> None:
+    with pytest.raises(UpstreamUnavailable):
+        await fundamental_client(lambda r: httpx.Response(503)).gate(date(2026, 10, 15))

@@ -29,6 +29,8 @@ class VwapBreakout(Strategy):
         if not finite(vwap, atr, ratio, c):
             return None
         before = ctx.rows[-1 - n : -1]
+        if before[0].candle.start_at < ctx.session[0].start_at:
+            return None  # VWAP restarts each session: yesterday's last bar was measured against yesterday's VWAP (9.9)
         if not all(finite(r.v["vwap"]) for r in before):
             return None
         sustained = all(d * (float(r.candle.close) - r.v["vwap"]) < 0 for r in before)

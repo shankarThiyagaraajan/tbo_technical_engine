@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import math
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pytest
 
 from tbo_technical_engine import indicators
+from tbo_technical_engine.indicators.bars import Bar, Bars, session_and_tod
 from tbo_technical_engine.indicators.base import Indicator
 from tbo_technical_engine.indicators.format import decimal_text
 from tbo_technical_engine.indicators.levels import camarilla_pivots, classic_pivots, cpr
@@ -57,16 +59,69 @@ def test_cpr_width_is_a_percentage_of_the_pivot() -> None:
     assert wide["cpr_width_pct"] == pytest.approx(10.0)
 
 
+def _full_session(
+    high: float, low: float, close: float, mid: float = 100.0
+) -> list[tuple[float, float, float, float, float]]:
+    """75 bars whose extremes are `high` and `low` and whose last close is `close`."""
+    bars = [(mid, mid, mid, mid, 10.0)] * 75
+    bars[10] = (mid, high, mid, mid, 10.0)
+    bars[20] = (mid, mid, low, mid, 10.0)
+    bars[74] = (close, close, close, close, 10.0)
+    return bars
+
+
 def test_pivots_come_from_the_previous_session_only() -> None:
-    day1 = [(100, 110, 90, 100, 10)] * 3  # session 1: H 110, L 90, C 100
-    day2 = [(105, 106, 104, 105, 10)] * 3
-    bars = from_ohlcv(day1 + day2, per_session=3)
+    day1 = _full_session(110, 90, 100)  # session 1: H 110, L 90, C 100
+    day2 = [(105.0, 106.0, 104.0, 105.0, 10.0)] * 75
+    bars = from_ohlcv(day1 + day2)
     p = indicators.get("pivots").batch(bars)["pivot_p"]
-    assert np.isnan(p[:3]).all()  # nothing before the second session
-    assert p[3:] == pytest.approx([100.0] * 3)  # and today's own prices change nothing
+    assert np.isnan(p[:75]).all()  # nothing before the second session
+    assert p[75:] == pytest.approx([100.0] * 75)  # and today's own prices change nothing
     stream = indicators.get("pivots").stream()
-    streamed = [stream.update(bars.row(i))["pivot_p"] for i in range(6)]
-    assert all(math.isnan(v) for v in streamed[:3]) and streamed[3:] == pytest.approx([100.0] * 3)
+    streamed = [stream.update(bars.row(i))["pivot_p"] for i in range(150)]
+    assert all(math.isnan(v) for v in streamed[:75]) and streamed[75:] == pytest.approx([100.0] * 75)
+
+
+def _with_muhurat() -> Bars:
+    """A regular session (H 110, L 90, C 100), a 12-bar Muhurat evening (H 101, L 99.5, C 100.5), a regular session."""
+    regular = from_ohlcv(_full_session(110, 90, 100) + [(105.0, 106.0, 104.0, 105.0, 10.0)] * 75)
+    evening_start = datetime(2026, 3, 3, 12, 45, tzinfo=UTC)  # 18:15 IST on the day after the first session
+    evening = []
+    for i in range(12):
+        start = evening_start + timedelta(minutes=5 * i)
+        session, tod = session_and_tod(start)
+        evening.append(
+            Bar(
+                int(start.timestamp()),
+                100.0,
+                101.0 if i == 3 else 100.2,
+                99.5 if i == 5 else 100.0,
+                100.5,
+                10.0,
+                session,
+                tod,
+            )
+        )
+    rows = [regular.row(i) for i in range(len(regular))]
+    # the evening sits between the two regular sessions: move the second regular session one day on
+    day2 = [r._replace(ts=r.ts + 86400, session=r.session + 1) for r in rows[75:]]
+    return Bars.from_bars([*rows[:75], *evening, *day2])
+
+
+@pytest.mark.parametrize("name", ["pivots", "camarilla", "cpr"])
+def test_a_special_session_is_not_the_previous_session(name: str) -> None:
+    """9.7: the day after a Muhurat hour uses the last regular session's levels, batch and streaming alike."""
+    bars = _with_muhurat()
+    indicator = indicators.get(name)
+    first = indicator.outputs[0]
+    batch = indicator.batch(bars)[first]
+    regular_levels = indicators.get(name).batch(from_ohlcv(_full_session(110, 90, 100) + _full_session(110, 90, 100)))[
+        first
+    ][75]
+    assert batch[75:87] == pytest.approx([regular_levels] * 12)  # the evening itself still reads the regular levels
+    assert batch[87:] == pytest.approx([regular_levels] * 75)  # the next day does too, not the evening's tiny range
+    stream = indicator.stream()
+    assert [stream.update(bars.row(i))[first] for i in range(len(bars))][75:] == pytest.approx(list(batch[75:]))
 
 
 # --- VWAP --------------------------------------------------------------------------------------------------------
@@ -141,8 +196,8 @@ def test_volume_average_leaves_the_current_bar_out() -> None:
 
 
 def test_supertrend_follows_a_rising_market_below_the_price_and_flips_when_it_breaks() -> None:
-    up = [(p, p + 1, p - 1, p + 0.5, 100) for p in np.arange(100.0, 130.0, 1.0)]
-    down = [(p, p + 1, p - 1, p - 0.5, 100) for p in np.arange(129.0, 90.0, -3.0)]
+    up = [(p, p + 1, p - 1, p + 0.5, 100.0) for p in map(float, np.arange(100.0, 130.0, 1.0))]
+    down = [(p, p + 1, p - 1, p - 0.5, 100.0) for p in map(float, np.arange(129.0, 90.0, -3.0))]
     bars = from_ohlcv(up + down)
     out = indicators.get("supertrend", period=10, multiplier=3.0).batch(bars)
     line, direction = out["supertrend_10_3"], out["supertrend_dir_10_3"]
@@ -154,7 +209,7 @@ def test_supertrend_follows_a_rising_market_below_the_price_and_flips_when_it_br
 
 
 def test_the_supertrend_band_only_tightens_while_the_trend_holds() -> None:
-    rows = [(p, p + 1, p - 1, p + 0.5, 100) for p in np.arange(100.0, 160.0, 1.0)]
+    rows = [(p, p + 1, p - 1, p + 0.5, 100.0) for p in map(float, np.arange(100.0, 160.0, 1.0))]
     line = indicators.get("supertrend").batch(from_ohlcv(rows))["supertrend_10_3"]
     valid = line[~np.isnan(line)]
     assert (np.diff(valid) >= 0).all()

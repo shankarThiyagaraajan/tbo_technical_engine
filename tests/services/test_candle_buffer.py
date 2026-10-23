@@ -66,3 +66,47 @@ def test_forget_drops_only_the_given_stocks() -> None:
     buffer.add(candle(ISIN_B, "5m", T0))
     buffer.forget([ISIN_A])
     assert buffer.count(ISIN_A, "5m") == 0 and buffer.count(ISIN_B, "5m") == 1
+
+
+def test_a_view_reads_like_the_series_without_copying() -> None:
+    buffer = CandleBuffer()
+    for i in range(6):
+        buffer.add(candle(ISIN_A, "5m", T0 + timedelta(minutes=5 * i)))
+    view = buffer.view(ISIN_A, "5m")
+    series = buffer.series(ISIN_A, "5m")
+    assert len(view) == 6 and list(view) == series and list(reversed(view)) == series[::-1]
+    assert view[0] == series[0] and view[-1] == series[-1] and view[-2] == series[-2] and view[1:4] == series[1:4]
+    assert view.count_through(T0 + timedelta(minutes=10)) == 3
+    assert len(buffer.view("INE000000000", "5m")) == 0
+    try:
+        view[6]
+    except IndexError:
+        pass
+    else:  # pragma: no cover
+        raise AssertionError("an index past the end must raise")
+
+
+def test_view_before_is_before_without_a_scan() -> None:
+    buffer = CandleBuffer()
+    for i in range(8):
+        buffer.add(candle(ISIN_A, "15m", T0 + timedelta(minutes=15 * i)))
+    for minutes in (0, 14, 15, 29, 30, 44, 45, 200):
+        cutoff = T0 + timedelta(minutes=minutes)
+        assert list(buffer.view_before(ISIN_A, "15m", cutoff)) == buffer.before(ISIN_A, "15m", cutoff)
+        assert buffer.before(ISIN_A, "15m", cutoff) == [
+            c for c in buffer.series(ISIN_A, "15m") if c.start_at + timedelta(minutes=15) <= cutoff
+        ]
+
+
+def test_the_sorted_starts_survive_out_of_order_arrivals_trimming_and_forgetting() -> None:
+    buffer = CandleBuffer()
+    for minutes in (30, 0, 15, 45, 5):  # arrival order is not time order
+        buffer.add(candle(ISIN_A, "5m", T0 + timedelta(minutes=minutes)))
+    assert [int((c.start_at - T0).total_seconds() // 60) for c in buffer.series(ISIN_A, "5m")] == [0, 5, 15, 30, 45]
+    for i in range(CAPACITY["15m"] + 5):
+        buffer.add(candle(ISIN_B, "15m", T0 + timedelta(minutes=15 * i)))
+    held = buffer.series(ISIN_B, "15m")
+    assert len(held) == CAPACITY["15m"] == len(buffer.view(ISIN_B, "15m"))
+    assert buffer.last(ISIN_B, "15m") == held[-1]
+    buffer.forget({ISIN_A})
+    assert buffer.series(ISIN_A, "5m") == [] and buffer.last(ISIN_A, "5m") is None

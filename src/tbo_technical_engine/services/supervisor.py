@@ -5,10 +5,12 @@ One `tick` is one decision; the signal worker calls it every few seconds. Nothin
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
-from tbo_platform_kit.calendar import IST, TradingCalendar
+from tbo_platform_kit.calendar import TradingCalendar
+from tbo_platform_kit.config.calendar import IST
 from tbo_platform_kit.http_client import UpstreamUnavailable
 from tbo_platform_kit.logging import get_logger
 
@@ -21,10 +23,16 @@ from tbo_technical_engine.store.research_cache import ResearchCache
 
 log = get_logger(__name__)
 SESSION_WARMUP_AT = time(9, 0)
-"""09:00 IST: each trading day starts with a fresh warm-up, so candles the feed lost overnight are repaired."""
+"""09:00 IST on a usual day: each trading day starts with a fresh warm-up, so candles the feed lost overnight are
+repaired. It is `WARMUP_BEFORE_OPEN` before the calendar's open, so a delayed open or an evening special session is
+warmed before its own first candle, not hours earlier (review 9.22)."""
+WARMUP_BEFORE_OPEN = timedelta(minutes=15)
 
 
 class WarmupSupervisor:
+    """Keeps the buffer filled: asks for a fresh warm-up at the start of each session, reads the feed's status at start,
+    and warms any stock that is not yet warm."""
+
     def __init__(
         self,
         client: MarketFeedClient,
@@ -35,6 +43,7 @@ class WarmupSupervisor:
         calendar: TradingCalendar,
         clock: Callable[[], datetime],
         cache: ResearchCache | None = None,
+        prime: Callable[[str], None] | None = None,
     ) -> None:
         self.client = client
         self.buffer = buffer
@@ -44,14 +53,18 @@ class WarmupSupervisor:
         self.calendar = calendar
         self.clock = clock
         self.cache = cache
+        self.prime = prime
+        """Called for each stock after a warm-up, to build its indicator state before the first candle needs it."""
         self._session_day: date | None = None
 
     async def tick(self) -> None:
+        """One supervision step; safe to call every few seconds. Does nothing outside trading days or without a
+        universe."""
         now = self.clock()
         local = now.astimezone(IST)
         if not self.calendar.is_trading_day(local.date()) or not self.universe.isins:
             return
-        if local.time() >= SESSION_WARMUP_AT and self._session_day != local.date():
+        if self._session_day != local.date() and now >= self._warmup_due(local.date()):
             self.readiness.request_warmup()
             self._session_day = local.date()
         if self.readiness.feed_state == "connecting":
@@ -70,5 +83,23 @@ class WarmupSupervisor:
             return
         generation = self.readiness.generation
         await warm_up(self.client, self.buffer, targets, now, self.calendar, self.spec, cache=self.cache)
+        await self._prime(targets)
         if self.readiness.needs_warmup and not self.readiness.mark_warm(generation):
             log.warning("warmup_discarded_feed_went_unhealthy")
+
+    def _warmup_due(self, day: date) -> datetime:
+        """When the day's fresh warm-up is due: `WARMUP_BEFORE_OPEN` before the calendar's open (09:00 IST usually)."""
+        session = self.calendar.session(day)
+        if session is None:  # not reached: `tick` checked the trading day; the usual time keeps it safe anyway
+            return datetime.combine(day, SESSION_WARMUP_AT, tzinfo=IST)
+        return session.normal[0] - WARMUP_BEFORE_OPEN
+
+    async def _prime(self, isins: list[str]) -> None:
+        """Build each warmed stock's indicator state, one stock at a time with a yield between, so the event loop (the
+        candle consumers) keeps running while a few hundred stocks are primed."""
+        if self.prime is None:
+            return
+        for isin in isins:
+            if is_warm(self.buffer, isin, self.spec):
+                self.prime(isin)
+            await asyncio.sleep(0)

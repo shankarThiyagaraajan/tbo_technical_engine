@@ -95,7 +95,7 @@ async def test_a_cold_stock_is_silent_but_keeps_collecting() -> None:
 @pytest.mark.parametrize("state", ["stale", "down", "connecting"])
 async def test_nothing_is_evaluated_while_the_feed_is_unhealthy(state: str) -> None:
     rig = Rig()
-    rig.readiness.on_feed_status(FeedStatus(state=state, changed_at=NOW))  # type: ignore[arg-type]
+    rig.readiness.on_feed_status(FeedStatus(state=state, changed_at=NOW))
     await rig.deliver(candle(ISIN_A, "5m", LIVE_START))
     assert rig.seen == []
 
@@ -124,3 +124,58 @@ async def test_the_age_limit_is_measured_from_the_close(late: int, evaluated: bo
     rig.clock = LIVE_START + timedelta(minutes=5, seconds=late)
     await rig.deliver(candle(ISIN_A, "5m", LIVE_START))
     assert bool(rig.seen) is evaluated
+
+
+class Tracked:
+    """What the latency tracker was told: (candle start, outcome, seconds)."""
+
+    def __init__(self) -> None:
+        self.told: list[tuple[datetime, str, float | None]] = []
+
+    def observe(self, start: datetime, outcome: str, seconds: float | None = None) -> None:
+        self.told.append((start, outcome, seconds))
+
+
+def tracked(rig: Rig) -> Tracked:
+    t = Tracked()
+    rig.ingest.tracker = t  # type: ignore[assignment]
+    return t
+
+
+async def test_an_evaluated_candle_is_reported_with_the_time_since_its_close() -> None:
+    rig = Rig()
+    t = tracked(rig)
+    rig.clock = NOW + timedelta(seconds=1.5)
+    await rig.deliver(candle(ISIN_A, "5m", LIVE_START))
+    assert t.told == [(LIVE_START, "evaluated", 1.5)]
+
+
+async def test_each_reason_a_candle_is_not_evaluated_is_reported() -> None:
+    cold, down, late = Rig(warm=False), Rig(healthy=False), Rig()
+    late.clock = NOW + timedelta(minutes=10)
+    for rig, reason in ((cold, "cold"), (down, "inactive"), (late, "stale")):
+        t = tracked(rig)
+        await rig.deliver(candle(ISIN_A, "5m", LIVE_START))
+        assert [o for _, o, _ in t.told] == [reason], reason
+
+
+async def test_a_failing_evaluator_is_reported_as_failed_and_the_others_still_run() -> None:
+    rig = Rig()
+    t = tracked(rig)
+
+    async def broken(_: Candle) -> None:
+        raise RuntimeError("boom")
+
+    rig.ingest.evaluators.insert(0, broken)
+    await rig.deliver(candle(ISIN_A, "5m", LIVE_START))
+    assert [o for _, o, _ in t.told] == ["failed"] and len(rig.seen) == 1
+
+
+async def test_fifteen_minute_candles_and_redeliveries_are_not_reported() -> None:
+    rig = Rig()
+    t = tracked(rig)
+    live = candle(ISIN_A, "5m", LIVE_START)
+    await rig.deliver(live)
+    await rig.deliver(live)
+    await rig.deliver(candle(ISIN_A, "15m", datetime(2026, 10, 15, 4, 15, tzinfo=UTC)))
+    assert len(t.told) == 1

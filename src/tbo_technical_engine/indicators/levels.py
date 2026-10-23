@@ -3,7 +3,8 @@
 Previous-session high, low and close are taken from the bars themselves (the session's highest high, lowest low and
 last close), so the same function serves every timeframe and needs no daily candles. They are valid from the first
 bar of the second session in the series. A session missing from the series is simply skipped: the "previous"
-session is the previous one present.
+session is the previous one present. So is a session that is not a regular one (see `is_regular`): the one-hour
+Muhurat evening has a range of a few rupees, and pivots built from it would be nonsense the next day (review 9.7).
 
 Formulas (H, L, C of the previous session; P = (H + L + C) / 3; range = H - L):
 
@@ -30,6 +31,7 @@ Hlc = tuple[float, float, float]
 
 
 def classic_pivots(h: float, low: float, c: float) -> dict[str, float]:
+    """Classic floor-trader pivots from the previous session's high, low and close."""
     p = (h + low + c) / 3.0
     rng = h - low
     return {
@@ -44,6 +46,8 @@ def classic_pivots(h: float, low: float, c: float) -> dict[str, float]:
 
 
 def camarilla_pivots(h: float, low: float, c: float) -> dict[str, float]:
+    """Camarilla levels R1-R4 / S1-S4: the close plus or minus 1.1 x range / (12, 6, 4, 2). R3/S3 are the usual reversal
+    levels, R4/S4 the breakout levels."""
     rng = h - low
     out: dict[str, float] = {}
     for i, divisor in enumerate((12.0, 6.0, 4.0, 2.0), start=1):
@@ -53,6 +57,8 @@ def camarilla_pivots(h: float, low: float, c: float) -> dict[str, float]:
 
 
 def cpr(h: float, low: float, c: float) -> dict[str, float]:
+    """The central pivot range: pivot, bottom and top central pivots and the range's width in percent of the pivot (a
+    narrow CPR hints at a trend day)."""
     p = (h + low + c) / 3.0
     bc = (h + low) / 2.0
     tc = 2 * p - bc
@@ -66,22 +72,39 @@ def cpr(h: float, low: float, c: float) -> dict[str, float]:
     }
 
 
+REGULAR_LAST_BAR_FROM_TOD = 15 * 60
+"""A regular session's last bar starts at or after 15:00 IST (a 5-minute session ends with the 15:25 bar)."""
+
+
+def is_regular(first_tod: int, last_tod: int) -> bool:
+    """True for a full session: it opens at 09:15 and runs to the close. A Muhurat or other special session, or one
+    that the data cut short, is not, and its range is not used for the next day's levels."""
+    return first_tod == SESSION_OPEN_TOD and last_tod >= REGULAR_LAST_BAR_FROM_TOD
+
+
 def previous_session_hlc(bars: Bars) -> tuple[F64, F64, F64]:
-    """For every bar, the high, low and close of the previous session (nan on the first session)."""
+    """For every bar, the high, low and close of the previous regular session (nan until one has ended)."""
     n = len(bars)
     ph, pl, pc = full(n), full(n), full(n)
     if n == 0:
         return ph, pl, pc
     starts = np.flatnonzero(np.r_[True, bars.session[1:] != bars.session[:-1]])
     ends = np.r_[starts[1:], n]
+    last: Hlc | None = None
     for idx in range(1, len(starts)):
         a, b = starts[idx - 1], ends[idx - 1]
-        h, low, c = float(bars.high[a:b].max()), float(bars.low[a:b].min()), float(bars.close[b - 1])
-        ph[starts[idx] : ends[idx]], pl[starts[idx] : ends[idx]], pc[starts[idx] : ends[idx]] = h, low, c
+        if is_regular(int(bars.tod[a]), int(bars.tod[b - 1])):
+            last = (float(bars.high[a:b].max()), float(bars.low[a:b].min()), float(bars.close[b - 1]))
+        if last is not None:
+            h, low, c = last
+            ph[starts[idx] : ends[idx]], pl[starts[idx] : ends[idx]], pc[starts[idx] : ends[idx]] = h, low, c
     return ph, pl, pc
 
 
 class _SessionLevels(Indicator):
+    """Base of the previous-session level indicators: subclasses name the outputs (`names`) and the formula (`kind`);
+    the batch and live forms are shared."""
+
     kind: Callable[[float, float, float], dict[str, float]]
     names: tuple[str, ...]
 
@@ -112,40 +135,53 @@ class _SessionLevels(Indicator):
 
 
 class _LevelsStream:
+    """Live form: tracks the running session's high, low and close; recomputes the levels when a session starts."""
+
     def __init__(self, spec: _SessionLevels) -> None:
         self.spec = spec
         self.session = -1
         self.cur_h = self.cur_l = self.cur_c = NAN
-        self.levels: dict[str, float] = {name: NAN for name in spec.names}
+        self.first_tod = self.last_tod = -1
+        self.levels: dict[str, float] = dict.fromkeys(spec.names, NAN)
 
     def update(self, bar: Bar) -> dict[str, float]:
         if bar.session != self.session:
-            if self.session != -1:
+            if self.session != -1 and is_regular(self.first_tod, self.last_tod):
                 self.levels = type(self.spec).kind(self.cur_h, self.cur_l, self.cur_c)
             self.session = bar.session
             self.cur_h, self.cur_l = bar.high, bar.low
+            self.first_tod = bar.tod
         else:
             self.cur_h, self.cur_l = max(self.cur_h, bar.high), min(self.cur_l, bar.low)
         self.cur_c = bar.close
+        self.last_tod = bar.tod
         return dict(self.levels)
 
 
 class Pivots(_SessionLevels):
+    """Classic pivots of the previous session."""
+
     kind = staticmethod(classic_pivots)
     names = ("pivot_p", "pivot_r1", "pivot_r2", "pivot_r3", "pivot_s1", "pivot_s2", "pivot_s3")
 
 
 class Camarilla(_SessionLevels):
+    """Camarilla pivots of the previous session."""
+
     kind = staticmethod(camarilla_pivots)
     names = tuple(f"cam_{side}{i}" for side in ("r", "s") for i in (1, 2, 3, 4))
 
 
 class Cpr(_SessionLevels):
+    """CPR of the previous session."""
+
     kind = staticmethod(cpr)
     names = ("cpr_pivot", "cpr_bc", "cpr_tc", "cpr_top", "cpr_bottom", "cpr_width_pct")
 
 
 class OpeningRange(Indicator):
+    """High, low, middle and height of the first `minutes` of the session; nan until the window has fully closed."""
+
     def __init__(self, minutes: int = 15, timeframe_minutes: int = 5) -> None:
         if minutes <= 0 or minutes % timeframe_minutes:
             raise ValueError("the range must be a whole number of bars")
@@ -192,6 +228,8 @@ class OpeningRange(Indicator):
 
 
 class _OrStream:
+    """Live form: accumulates the window's high and low, publishing them once the window's last bar has closed."""
+
     def __init__(self, spec: OpeningRange) -> None:
         self.spec = spec
         self.session = -1
@@ -214,4 +252,4 @@ class _OrStream:
                 self.done = True
         if self.valid and self.done:
             return s._values(self.hi, self.lo)
-        return {name: NAN for name in s.outputs}
+        return dict.fromkeys(s.outputs, NAN)

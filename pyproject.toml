@@ -11,9 +11,13 @@ requires-python = ">=3.12"
 dependencies = [
   "tbo-platform-kit[sentry]~=1.0",
   "tbo-contracts>=1.1,<2",
+  "tbo-signals",  # the signals library (config/signals.yaml); pinned by commit in [tool.uv.sources]
   "numpy~=2.2.0",
+  "numba>=0.68,<0.69",  # direct pin next to NumPy (vectorbt needs it; the lock only had it as a transitive entry)
   "polars~=1.44.0",
   "pyyaml>=6,<7",
+  "vectorbt>=0.28,<0.29",  # backtest statistics (backtest/stats.py); upgrade with NumPy, Numba and Polars together
+  "plotly<6",  # vectorbt 0.28 imports a plotly trace type that plotly 6 removed: without this it fails on import
 ]
 
 [project.scripts]
@@ -21,19 +25,25 @@ tbo-technical-engine = "tbo_technical_engine.main:main"
 
 [dependency-groups]
 dev = [
-  "pytest>=8.3,<9",
-  "pytest-asyncio>=0.24,<1",
+  "pytest>=9.0.3,<10",
+  "pytest-asyncio>=1.0,<2",
   "ruff==0.11.8",
   "mypy==1.15.0",
   "schemathesis>=4.3,<5",
   "celery-types>=0.23",
   "ta-lib>=0.6,<1",
   "types-pyyaml>=6,<7",
+  "bandit[toml]>=1.8,<2",
+  "pytest-cov>=6,<7",
+  "pip-audit>=2.9,<3",
+  "pre-commit>=4,<5",
+  "pandas-stubs>=3.0.5.260914",
 ]
 
 [tool.uv.sources]
-tbo-platform-kit = { git = "https://github.com/shankarThiyagaraajan/tbo_platform", rev = "bfaaabf54981055950ae03bad9ed14c384c83c9c", subdirectory = "packages/tbo_platform_kit" }
-tbo-contracts = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts", tag = "v1.2.0" }
+tbo-platform-kit = { git = "https://github.com/shankarThiyagaraajan/tbo_platform", rev = "4e92fc0739500379c9cad8334ee09391c8ed8e61", subdirectory = "packages/tbo_platform_kit" }
+tbo-contracts = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts", rev = "f884a2d3cc5fdf5fc6b0c60ffa91056fae2b58d9" }  # 1.30.0 (index candles, ADR-019)
+tbo-signals = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "e758307306e755c5f1df81614bb84cfde3c320ce", subdirectory = "packages/tbo_signals" }
 
 
 [tool.pytest.ini_options]
@@ -48,11 +58,23 @@ target-version = "py312"
 extend-exclude = [".tbo_contracts"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "S", "SIM", "RUF", "ASYNC", "PT"]
-ignore = ["S101"]
+# E/W pycodestyle, F pyflakes, I isort, UP pyupgrade, B bugbear, SIM simplify, C4 comprehensions, C90 McCabe,
+# D pydocstyle (convention below), S security, RUF ruff-specific, ASYNC, PT pytest style.
+select = ["E", "W", "F", "I", "UP", "B", "S", "SIM", "C4", "C90", "D", "RUF", "ASYNC", "PT"]
+# D2xx/D401 are wording style (this repo closes a docstring on its last line and starts with the subject); D102, D105
+# and D107 are not required because interface overrides, dunder methods and __init__ are described by the class
+# docstring or the base class. D100, D101, D103 and D104 (module, class, function, package) stay on.
+ignore = ["S101", "D105", "D107", "D102", "D205", "D209", "D401", "D203", "D212", "D213"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S", "PT011", "PT018"]
+"tests/**" = ["S", "PT011", "PT018", "D"]
+"migrations/**" = ["D"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["tbo_platform_kit.http_server.requires", "fastapi.Header", "fastapi.Depends", "fastapi.Query"]
@@ -60,10 +82,36 @@ extend-immutable-calls = ["tbo_platform_kit.http_server.requires", "fastapi.Head
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src"]
+files = ["src", "tests"]
 plugins = ["pydantic.mypy"]
 
+# TA-Lib (the test oracle) and the kit's `research_task` decorator ship no annotations; the tests that call them
+# cannot satisfy disallow_untyped_calls, and nothing else in tests is excused.
+[[tool.mypy.overrides]]
+module = ["tests.indicators.test_oracle", "tests.test_tasks"]
+disallow_untyped_calls = false
+
 [tool.uv]
-# The kit's own sources pin tbo_contracts v1.1.0; this service needs v1.2.0 (the technical contract bundles, and the
-# catalogue has not_implemented). Drop the override when the kit moves to v1.2.0 or later.
-override-dependencies = ["tbo-contracts @ git+https://github.com/shankarThiyagaraajan/tbo_contracts@v1.2.0"]
+# The kit's own sources pin tbo_contracts v1.1.0; this service needs 1.30.0 (the index candle event, ADR-019).
+# Drop the override when the kit moves to 1.30.0 or later.
+override-dependencies = ["tbo-contracts @ git+https://github.com/shankarThiyagaraajan/tbo_contracts@f884a2d3cc5fdf5fc6b0c60ffa91056fae2b58d9"]
+
+[tool.coverage.run]
+source = ["src/tbo_technical_engine"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+# B101 (assert) is off for the same reason as ruff's S101: the asserts in src narrow a settings value that
+# `settings.require(...)` has just checked, and are never a security check.
+skips = ["B101"]
+
+[[tool.mypy.overrides]]
+# vectorbt ships no type information; it is used in one module (backtest/stats.py).
+module = ["vectorbt", "vectorbt.*"]
+ignore_missing_imports = true

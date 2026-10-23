@@ -14,8 +14,10 @@ import math
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from math import isfinite
 from typing import ClassVar, Literal
 
+from tbo_technical_engine.indicators.format import decimal_text
 from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.schemas.signal import Component, Draft
 from tbo_technical_engine.schemas.strategy import Params
@@ -26,6 +28,8 @@ NAN = math.nan
 
 
 def direction(side: Side) -> int:
+    """+1 for a buy, -1 for a sell: lets long and short share one rule (`d * (a - b) > 0` means "a is on the
+    favourable side of b")."""
     return 1 if side == "buy" else -1
 
 
@@ -39,6 +43,8 @@ class Row:
 
 @dataclass(frozen=True)
 class Context:
+    """Everything one evaluation may read; the fields below say what each holds."""
+
     isin: str
     rows: Sequence[Row]
     """The last 5-minute rows, oldest first; the last one is the candle being evaluated."""
@@ -54,20 +60,28 @@ class Context:
 
     @property
     def now(self) -> Row:
+        """The row of the candle being evaluated."""
         return self.rows[-1]
 
 
 def finite(*values: float) -> bool:
-    return all(math.isfinite(x) for x in values)
+    """True when every value is a real number (nan means an indicator is still warming up). A plain loop: this runs
+    about a million times in a one-year backtest, and `all()` over a generator was a measurable part of it."""
+    for x in values:  # noqa: SIM110  (kept as a loop on purpose: see the docstring)
+        if not isfinite(x):
+            return False
+    return True
 
 
 def component(name: str, is_met: bool, value: float | None = None) -> Component:
-    from tbo_technical_engine.indicators.format import decimal_text
-
+    """One named condition of a rule, for the candidate's audit trail (`is_met` and, where it helps, the number behind
+    it)."""
     return Component(name=name, is_met=is_met, value=None if value is None else decimal_text(value))
 
 
 class Strategy(ABC):
+    """A trading rule. Subclasses implement `evaluate` for one side; `on_candle` runs the requested sides."""
+
     name: ClassVar[str]
 
     def warmup(self, history: Sequence[Row]) -> None:
@@ -76,6 +90,7 @@ class Strategy(ABC):
         return None
 
     def on_candle(self, ctx: Context, p: Params, sides: Sequence[Side] = SIDES) -> list[Draft]:
+        """Drafts for each requested side (the evaluator leaves out a side still in its cooldown)."""
         drafts = []
         for side in sides:
             draft = self.evaluate(ctx, p, side)

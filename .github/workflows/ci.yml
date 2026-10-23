@@ -1,17 +1,19 @@
-# Manual-only while GitHub Actions minutes are exhausted: run it from Actions -> Run workflow.
-# Normal triggers, to restore when minutes return:
-#   push: {branches: [main], tags: ["v*"]}   and   pull_request
 # CI is tbo_platform's reusable workflow, pinned to the template's release: lint, types, tests against real
-# PostgreSQL and Redis, Schemathesis, the contract check, the image build and a Trivy scan; a v* tag also
-# publishes the image and a GitHub release.
+# PostgreSQL and Redis, Schemathesis, the contract check. The image build, Trivy scan and release are
+# off by default (the runner has no Docker).
 name: CI
+# Manual start only (project rule 17): checks run locally with `make check` before a push; GitHub's runner minutes are kept
+# for tags and releases. Start this by hand when a hosted run is wanted.
 on:
   workflow_dispatch:
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   ci:
-    uses: shankarThiyagaraajan/tbo_platform/.github/workflows/python-service.yml@bfaaabf54981055950ae03bad9ed14c384c83c9c
+    uses: shankarThiyagaraajan/tbo_platform/.github/workflows/python-service.yml@299aaa9e1f472881d1abccc1b19ec21a954c3a75
     permissions:
       contents: write
       packages: write

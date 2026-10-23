@@ -3,7 +3,7 @@ side as the mirror image of the long one."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -135,6 +135,14 @@ def test_vwap_breakout_filters(ctx: Context) -> None:
     assert run("vwap_breakout", ctx, vwap_params()) is None
 
 
+def test_vwap_breakout_needs_the_bars_below_to_be_in_todays_session() -> None:
+    """9.9: at 09:30 the oldest "bar below" would be yesterday's last bar against yesterday's VWAP."""
+    ctx = vwap_ctx()
+    assert run("vwap_breakout", ctx, vwap_params()) is not None
+    today = replace(ctx, session=ctx.session[-3:])  # session started 2 bars after the oldest "below" bar
+    assert run("vwap_breakout", today, vwap_params()) is None
+
+
 # ---- 15-minute opening range breakout ----------------------------------------------------------------------------
 
 
@@ -160,7 +168,7 @@ def orb_ctx(
     trend: float | None = None,
     **over: float,
 ) -> Context:
-    values = dict(or_high=100.0, or_low=98.0, or_mid=99.0, or_height=2.0, vol_ratio_20=ratio, atr_14=0.8)
+    values = {"or_high": 100.0, "or_low": 98.0, "or_mid": 99.0, "or_height": 2.0, "vol_ratio_20": ratio, "atr_14": 0.8}
     values.update(over)
     first = row(0, open_, 100.2, 99.0, 99.7)
     rows = [first, row(1, 99.7, 100.0, 99.5, 99.9, **values), row(2, 99.9, 100.6, 99.8, close, **values)]
@@ -348,25 +356,24 @@ def test_no_strategy_fires_on_warm_up_values() -> None:
         daily={"atr_14": 1.0},
         prev_close=100.0,
     )
-    p = params(
-        **{
-            "bars_below": 3,
-            "volume_ratio_min": "1.5",
-            "target_2_min_gap_r": "0.5",
-            "target_1_min_r": "0.5",
-            "min_room_pct": "0.2",
-            "confluence_pct": "0.25",
-            "require_index": False,
-            "max_range_daily_atr": "1",
-            "narrow_range_pct": "0.4",
-            "gap_skip_pct": "2",
-            "target_1_range": "1",
-            "target_2_range": "2",
-        }
-    )
+    extra: dict[str, str | int | bool] = {
+        "bars_below": 3,
+        "volume_ratio_min": "1.5",
+        "target_2_min_gap_r": "0.5",
+        "target_1_min_r": "0.5",
+        "min_room_pct": "0.2",
+        "confluence_pct": "0.25",
+        "require_index": False,
+        "max_range_daily_atr": "1",
+        "narrow_range_pct": "0.4",
+        "gap_skip_pct": "2",
+        "target_1_range": "1",
+        "target_2_range": "2",
+    }
+    p = params(**extra)
     for strategy in REGISTRY.values():
         for side in ("buy", "sell"):
-            assert strategy.evaluate(blank, p, side) is None  # type: ignore[arg-type]
+            assert strategy.evaluate(blank, p, side) is None
 
 
 def test_a_draft_never_has_a_stop_on_the_wrong_side_or_targets_out_of_order() -> None:
@@ -376,6 +383,3 @@ def test_a_draft_never_has_a_stop_on_the_wrong_side_or_targets_out_of_order() ->
     short = run("ema_9_21_crossover", mirror(ema_ctx()), params(), "sell")
     assert short is not None
     assert short.target_2 < short.target_1 < short.entry_low <= short.entry_high < short.stop
-
-
-_ = Callable  # (kept for annotations in future parametrised helpers)

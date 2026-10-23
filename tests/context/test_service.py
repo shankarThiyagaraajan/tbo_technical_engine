@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import func, select, text
 from tbo_contracts import validate
-from tbo_platform_kit.calendar import IST
+from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.context.index_source import IndexSeries, IndexSnapshot, VixReading
 from tbo_technical_engine.schemas.candle import UniverseSnapshot
@@ -15,7 +15,7 @@ from tbo_technical_engine.services.candle_buffer import CandleBuffer
 from tbo_technical_engine.services.context_service import CONTEXT_EVENT, ContextService, boundary_of
 from tbo_technical_engine.services.readiness import Readiness
 from tbo_technical_engine.services.universe import UniverseHolder
-from tbo_technical_engine.tables import market_context, outbox
+from tbo_technical_engine.store.tables import market_context, outbox
 from tests.strategies.builders import DAY
 from tests.support import CALENDAR, ISIN_A, ISIN_B, candle, session_start, trading_days_back
 
