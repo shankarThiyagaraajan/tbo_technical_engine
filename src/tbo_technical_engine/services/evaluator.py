@@ -117,16 +117,20 @@ class StrategyEvaluator:
                 sides = self._open_sides(candle.isin, name, params, close_at)
                 if not sides:
                     continue
+                ctx = ctx or self._context_of(candle)
                 if ctx is None:
-                    ctx = self.contexts.get(candle.start_at) if self.contexts is not None else self.context(candle)
-                    if ctx is None:
-                        return []
-                for draft in strategy.on_candle(ctx, params, sides):
-                    found.append(self._candidate(candle, name, draft, close_at, now))
+                    return []
+                found.extend(
+                    self._candidate(candle, name, d, close_at, now) for d in strategy.on_candle(ctx, params, sides)
+                )
             except Exception as exc:
                 # A strategy that fails (a bad parameter, a bug) is silent; the others still run.
                 log.error("strategy_failed", strategy=name, isin=candle.isin, error=type(exc).__name__)
         return found
+
+    def _context_of(self, candle: Candle) -> Context | None:
+        """The candle's context: from the shared cache when there is one, else built here."""
+        return self.contexts.get(candle.start_at) if self.contexts is not None else self.context(candle)
 
     def _open_sides(self, isin: str, name: str, params: Params, close_at: datetime) -> list[Side]:
         """The sides a strategy may fire on now: none outside its entry window, and none still in its cooldown."""

@@ -105,20 +105,27 @@ class _Position:
 
     def targets(self, c: Candle, target_1: Decimal, target_2: Decimal, *, stop_to_entry: bool) -> bool:
         """Target 1 (part out, maybe the stop to the entry), then target 2 (the rest out); True once closed."""
-        if not self.t1_hit and _with(self.side, _best(self.side, c), target_1):
-            self.t1_hit = True
-            if self.first_qty:
-                self.sell(self.first_qty, c.open if _with(self.side, c.open, target_1) else target_1)
-                self.remaining -= self.first_qty
-            if stop_to_entry:
-                self.level, self.stop_moved = self.entry, True
-                if _against(self.side, _worst(self.side, c), self.level):
-                    self.exit_all(self.level, "stop_at_entry")
-                    return True
+        hit_1 = not self.t1_hit and _with(self.side, _best(self.side, c), target_1)
+        if hit_1 and self._first_target(c, target_1, stop_to_entry=stop_to_entry):
+            return True
         if self.t1_hit and _with(self.side, _best(self.side, c), target_2):
             self.exit_all(c.open if _with(self.side, c.open, target_2) else target_2, "target_2")
             return True
         return False
+
+    def _first_target(self, c: Candle, target_1: Decimal, *, stop_to_entry: bool) -> bool:
+        """Part out at target 1 and maybe move the stop to the entry; True when this candle then stops it out there."""
+        self.t1_hit = True
+        if self.first_qty:
+            self.sell(self.first_qty, c.open if _with(self.side, c.open, target_1) else target_1)
+            self.remaining -= self.first_qty
+        if not stop_to_entry:
+            return False
+        self.level, self.stop_moved = self.entry, True
+        if not _against(self.side, _worst(self.side, c), self.level):
+            return False
+        self.exit_all(self.level, "stop_at_entry")
+        return True
 
 
 def simulate(

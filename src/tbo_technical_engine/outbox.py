@@ -78,20 +78,40 @@ async def flush(
     while True:
         async with sessions() as session, session.begin():
             rows = await _batch(session, failed)
-            for row in rows:
-                outcome = await _publish_one(session, publisher, row, count_attempts=count_attempts)
-                if outcome == "deferred":
-                    return published  # Redis is the problem, not the rows: try again next sweep, count nothing
-                if outcome == "row_fault":
-                    failed.add(row.event_id)
-                    continue
-                published += 1
-                if signals is not None:
-                    signals.emit("technical.signal_events", 1)
+            done, deferred = await _publish_rows(
+                session, publisher, rows, failed, signals, count_attempts=count_attempts
+            )
+        published += done
+        if deferred:
+            return published  # Redis is the problem, not the rows: try again next sweep, count nothing
         if len(rows) < BATCH:
             if published:
                 log.info("outbox_flushed", published=published)
             return published
+
+
+async def _publish_rows(
+    session: AsyncSession,
+    publisher: Publisher,
+    rows: Sequence[Row[Any]],
+    failed: set[str],
+    signals: Signals | None,
+    *,
+    count_attempts: bool,
+) -> tuple[int, bool]:
+    """Publish one batch in order: how many were published, and whether Redis deferred the rest of the sweep."""
+    published = 0
+    for row in rows:
+        outcome = await _publish_one(session, publisher, row, count_attempts=count_attempts)
+        if outcome == "deferred":
+            return published, True
+        if outcome == "row_fault":
+            failed.add(row.event_id)
+            continue
+        published += 1
+        if signals is not None:
+            signals.emit("technical.signal_events", 1)
+    return published, False
 
 
 async def _batch(session: AsyncSession, failed: set[str]) -> Sequence[Row[Any]]:
