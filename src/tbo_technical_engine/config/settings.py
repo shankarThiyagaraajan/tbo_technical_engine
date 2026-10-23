@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import AnyHttpUrl
+from pydantic import AnyHttpUrl, Field
 from tbo_platform_kit.settings import ComponentSettings
 
 REPOSITORY = "tbo_technical_engine"
@@ -19,6 +19,12 @@ class Settings(ComponentSettings, short_name=SHORT_NAME, repository=REPOSITORY):
     """This component's configuration. A field `x` is read from `TBO_TECHNICAL_X`; the string under each says what it
     is."""
 
+    bind_host: str = "127.0.0.1"
+    """The address the API listens on. Loopback by default, so a process started by hand is not reachable from the
+    network; the image sets TBO_TECHNICAL_BIND_HOST=0.0.0.0, because inside its container only the stack's internal
+    network and Caddy reach it."""
+    bind_port: int = Field(default=8000, ge=1, le=65_535)
+    """The API port (the image's EXPOSE uses 8000)."""
     contract_file: Path = Path("contract/openapi.json")
     """The bundled contract this service serves at GET /openapi.json (scripts/vendor_contract.sh writes it)."""
 

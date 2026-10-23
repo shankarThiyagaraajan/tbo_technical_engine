@@ -24,7 +24,7 @@ from tbo_technical_engine.backtest.evidence import build_evidence
 from tbo_technical_engine.backtest.index_side import PRIMARY_INDEX, index_sides
 from tbo_technical_engine.backtest.overrides import OverrideError, for_backtest
 from tbo_technical_engine.backtest.report import contract_metrics, study_result
-from tbo_technical_engine.backtest.study import run_study
+from tbo_technical_engine.backtest.study import StudyData, run_study
 from tbo_technical_engine.schemas.backtest import BacktestCreate, BacktestSettings, ParamOverride, Trade
 from tbo_technical_engine.schemas.costs import CostSchedule
 from tbo_technical_engine.schemas.strategy import StrategyFile
@@ -216,11 +216,7 @@ class BacktestRunner:
             row.strategy,
             overrides,
             row.params_version,
-            isins,
-            self.cache.stock,
-            {i: self.cache.session_dates(i, "5m") for i in isins},
-            start,
-            end,
+            StudyData(isins, self.cache.stock, {i: self.cache.session_dates(i, "5m") for i in isins}, start, end),
             self.settings,
             self.costs,
             rules,

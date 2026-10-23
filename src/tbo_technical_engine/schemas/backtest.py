@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from tbo_technical_engine.schemas.candle import Candle
 
 NAME = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
-ISIN = re.compile(r"^IN[A-Z0-9]{9}[0-9]$")
+ISIN = re.compile(r"^IN[A-Z\d]{9}\d$", re.ASCII)  # ASCII: a digit of another script is no ISIN digit
 ExitReason = Literal["target_2", "stop", "stop_at_entry", "time_exit", "end_of_data"]
 Side = Literal["buy", "sell"]
 

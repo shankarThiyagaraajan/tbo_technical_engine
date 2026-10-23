@@ -18,7 +18,8 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 | TE8 Hardening | Built on branch `claude/te8-9h7qqj` (on top of TE7). A per-boundary evaluation record (`evaluation_boundary`, migration 0007: evaluated, stale, cold, inactive, failed, absent, p50/p95/max latency, candle close to end of evaluation on the worker's clock), Prometheus gauges set by the API process (the worker has no port), `python -m tbo_technical_engine.apps.session_report` (the ten-clean-sessions check), failure drills as tests on a real PostgreSQL and Redis (`tests/drills/`: feed outage, Redis restart with and without its data, worker crash), runbooks and monitoring notes (`docs/runbooks.md`, `docs/monitoring.md`). Found and fixed on the way: the kit's consumer retries a missing group for ever after a Redis restart without data (`consumers/handlers.py` now recreates it and asks for a warm-up). Alert rules, their tests and dashboard panels are a companion `tbo_platform` PR. **Pending on real data: ten consecutive clean sessions and the real p95; nothing here proves either on synthetic data.** |
 | Signals pilot (stage 5) | Merged (PR #11, #12, #14; `make check` clean locally, CI did not run). `config/signals.yaml` declares 11 signals (the six board stages, worker and swing activity, three events); `services/platform_signals.py` builds `Signals` per process; the signal worker, the Celery worker and the API call it; the manifest is served at `GET /v1/signal-manifest` (scope `technical:read`). `tbo_signals` 0.5.0 pinned by tbo_platform_kit commit `aca4999`, `tbo-contracts` 1.16.0 by commit `a3317a2` (untagged, vendored `contract/` the same), kit pinned at `4e92fc0`. **Pending on the laptop:** checking the numbers against `redis-cli` and `psql`; a scrape port for the worker (see Decisions). |
 | Code review 2026-10-18 (numbers 9.x) | Fixed (9.1 ported from platform 2.2; the 9.14 contract wording is in contracts 1.16.0). See "Review fixes" under Decisions. |
-| Code review 2026-10-20 (9.20 to 9.26) | Fixed on branch `claude/project-thread-xe1v22` (PR not merged yet; `make check` clean locally, CI did not run): 9.20 memory, 9.21 tools in the image, 9.22 session hours, 9.23 one price scale, 9.25 Redis timeouts, 9.26 grace, universe backoff, prune index. See "Review fixes (2026-10-20)". |
+| Code review 2026-10-20 (9.20 to 9.26) | Fixed (PR #28 merged, f96d928; `make check` clean locally, CI did not run): 9.20 memory, 9.21 tools in the image, 9.22 session hours, 9.23 one price scale, 9.25 Redis timeouts, 9.26 grace, universe backoff, prune index. See "Review fixes (2026-10-20)". |
+| SonarQube strict fixes (2026-10-23, FIX-BRIEFS 2.10) | On branch `claude/project-thread-n7y5rv` (PR open; `make check` clean locally, CI did not run). See "SonarQube strict fixes (2026-10-23)". |
 
 ## Decisions
 
@@ -272,3 +273,25 @@ The daily snapshot carries `return_12m_pct`: the last close against the close 25
 ## Stock master check (stage S3c, 2026-10-20)
 
 Read-only check, no code change. The engine keeps no stock master of its own and reads none: the universe and the gate come from the fundamental engine's API (`GET /v1/universe`, `GET /v1/gate`), candles and feed status from the market feed's API, and nothing reads a name, symbol, sector or index membership. Its tables (`indicator_snapshot`, `technical_snapshot`, `signal_candidate`, `swing_setup`, `backtest_trade` and the rest) are high-volume derived results, which the user_data plan (1a.6) lists as written exceptions to the `market_data` foreign keys. Nothing to switch in S3c or S3d. The index and India VIX producer work (market feed) is where this engine next reads shared market data.
+
+## SonarQube strict fixes (2026-10-23)
+
+From `reviews/2026-10-21-sonarqube-strict/tbo_technical_engine.md` and FIX-BRIEFS 2.10 (pytest 9 was already in PR #28).
+
+- **Bind host from settings:** `TBO_TECHNICAL_BIND_HOST` (default `127.0.0.1`) and `..._BIND_PORT`; the image sets `0.0.0.0`.
+- **Backtest code split, results unchanged:** `simulate` is `_fill`, `_manage` and `_trade` around a `_Position` (stop, targets,
+  exit legs); `run_grid` is `_replay_stock` and `_over_budget`; `build_tape` has `_replay_day`; the report's `render` has
+  `_caveats`, `_section` and `_folds`; the walk-forward choice is `_choose`. `run_grid` and `run_strategy` lost their unused
+  `strategy` argument, and `run_study` takes a `StudyData` (stocks, loader, sessions, range) instead of five arguments. Checked
+  with `scripts/identity_check.py --digests --stocks 4 --sessions 60`: the candidate, indicator and study digests equal `main`'s
+  (950 candidates, 285 trades).
+- **Live code split, same arithmetic:** ADX smoothing (`_smoothed`, `_add_dx`), Supertrend bands (`_carried`, `_direction`), the
+  evaluator's entry window and cooldown (`_open_sides`), ORB's gap check, VWAP pivot's entry test, the swing trend checks
+  (`_known`, `_state`), the fundamental client's paging (`_page`), the outbox flush (`_batch`, `_publish_one`, `_record_row_fault`).
+- **Smaller items:** ISIN patterns use `\d` with `re.ASCII`; scope and signal names are constants; `_session_of` is synchronous;
+  `NoIndexSource` names `IndexSource` as its base; `may_evaluate` (unused, tool scan 9.5.1) removed; one `except ValueError` in
+  paging; tests no longer compare an expression with itself, name the exception they expect, and skip with `assume`.
+- virtualenv 21.14.13 (CVE-2026-113722, dev-only through pre-commit).
+- **Left for SonarQube to accept:** `S7503` on the three consumer handlers in `consumers/handlers.py` (the kit's consumer awaits
+  every handler, and these three do synchronous work). Not in this change: the test-style hits `S9073` and `S5778`, deferred by
+  Bala on 2026-10-21.

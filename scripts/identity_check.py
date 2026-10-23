@@ -26,7 +26,7 @@ from tempfile import TemporaryDirectory
 
 from tbo_technical_engine.backtest.costs import load_costs
 from tbo_technical_engine.backtest.replay import replay_stock
-from tbo_technical_engine.backtest.study import run_study
+from tbo_technical_engine.backtest.study import StudyData, run_study
 from tbo_technical_engine.indicators.bars import Bars
 from tbo_technical_engine.schemas.synthetic import SyntheticSpec
 from tbo_technical_engine.services.backtests import load_settings
@@ -66,8 +66,9 @@ def digests(stocks: int = 4, sessions: int = 5, warmup: int = 12, seed: int = 21
         cache = ResearchCache(Path(directory))
         settings = load_settings(ROOT / "config" / "backtest.yaml")
         study = run_study(
-            file, STUDY_STRATEGY, [], None, isins, cache.stock, {i: cache.session_dates(i, "5m") for i in isins},
-            days[warmup], days[-1], settings, load_costs(ROOT / "config" / "costs.yaml"), None,
+            file, STUDY_STRATEGY, [], None,
+            StudyData(isins, cache.stock, {i: cache.session_dates(i, "5m") for i in isins}, days[warmup], days[-1]),
+            settings, load_costs(ROOT / "config" / "costs.yaml"), None,
             monotonic=time.monotonic, deadline=float("inf"),
         )  # fmt: skip
         text = json.dumps(
@@ -92,7 +93,8 @@ def digests(stocks: int = 4, sessions: int = 5, warmup: int = 12, seed: int = 21
 def run_with_jit(enabled: bool, args: list[str]) -> dict[str, str]:
     """This script's digests in a fresh interpreter with the JIT on or off (the variable is read when Numba loads)."""
     env = {**os.environ, "NUMBA_DISABLE_JIT": "0" if enabled else "1"}
-    done = subprocess.run(  # noqa: S603  (our own interpreter and module, fixed arguments)
+    # S603: our own interpreter and module, fixed arguments
+    done = subprocess.run(  # noqa: S603
         [sys.executable, "-m", "scripts.identity_check", "--digests", *args],
         cwd=ROOT, env=env, capture_output=True, text=True, check=False,
     )  # fmt: skip

@@ -42,10 +42,10 @@ def test_a_tape_built_for_the_union_of_windows_serves_another_parameter_set() ->
 
 def test_the_grid_gives_each_set_exactly_what_a_run_of_its_own_gives() -> None:
     both = configs()
-    outcomes, skipped = run_grid(both, "vwap_pivot", [ISIN_A], load, FIRST, LAST, SETTINGS.execution, COSTS, None)
+    outcomes, skipped = run_grid(both, [ISIN_A], load, FIRST, LAST, SETTINGS.execution, COSTS, None)
     assert skipped is None
     for combo, config in both.items():
-        alone = run_strategy(config, "vwap_pivot", [ISIN_A], load, FIRST, LAST, SETTINGS.execution, COSTS, None)
+        alone = run_strategy(config, [ISIN_A], load, FIRST, LAST, SETTINGS.execution, COSTS, None)
         assert outcomes[combo] == alone and alone.candidates > 0
 
 
@@ -59,7 +59,7 @@ def test_a_grid_that_does_not_fit_the_budget_keeps_only_the_base_set(monkeypatch
 
     monkeypatch.setattr(engine_module, "build_tape", slow)
     outcomes, skipped = run_grid(
-        configs(), "vwap_pivot", [ISIN_A, "INE000002A02"], lambda _i: load(""), FIRST, LAST,
+        configs(), [ISIN_A, "INE000002A02"], lambda _i: load(""), FIRST, LAST,
         SETTINGS.execution, COSTS, None, monotonic=lambda: clock[0], deadline=3600.0,
     )  # fmt: skip
     assert list(outcomes) == [BASE] and skipped is not None and "time budget" in skipped

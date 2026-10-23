@@ -57,7 +57,7 @@ class IndexSource(Protocol):
         ...
 
 
-class NoIndexSource:
+class NoIndexSource(IndexSource):
     """No index data (a worker built without the feed's source, and tests): the context leaves those fields null."""
 
     async def fetch(self, now: datetime) -> IndexSnapshot:

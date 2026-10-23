@@ -110,19 +110,11 @@ class StrategyEvaluator:
         if candle.timeframe != "5m":
             return []
         close_at = candle.start_at + length("5m")
-        local = close_at.astimezone(IST).time()
         ctx: Context | None = None
         found: list[SignalCandidate] = []
         for name, strategy, params in self.active():
             try:
-                if not (params.clock("entry_from") <= local <= params.clock("entry_until")):
-                    continue
-                cooldown = timedelta(minutes=params.integer("cooldown_minutes"))
-                sides: list[Side] = [
-                    s
-                    for s in SIDES
-                    if (last := self.fired.get((candle.isin, name, s))) is None or close_at - last >= cooldown
-                ]
+                sides = self._open_sides(candle.isin, name, params, close_at)
                 if not sides:
                     continue
                 if ctx is None:
@@ -135,6 +127,14 @@ class StrategyEvaluator:
                 # A strategy that fails (a bad parameter, a bug) is silent; the others still run.
                 log.error("strategy_failed", strategy=name, isin=candle.isin, error=type(exc).__name__)
         return found
+
+    def _open_sides(self, isin: str, name: str, params: Params, close_at: datetime) -> list[Side]:
+        """The sides a strategy may fire on now: none outside its entry window, and none still in its cooldown."""
+        local = close_at.astimezone(IST).time()
+        if not (params.clock("entry_from") <= local <= params.clock("entry_until")):
+            return []
+        cooldown = timedelta(minutes=params.integer("cooldown_minutes"))
+        return [s for s in SIDES if (last := self.fired.get((isin, name, s))) is None or close_at - last >= cooldown]
 
     def forget(self, isins: frozenset[str] | set[str]) -> None:
         """Drop the cooldowns of stocks that left the universe, so the map does not grow with every stock ever seen."""

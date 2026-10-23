@@ -22,7 +22,7 @@ def decode(cursor: str | None) -> list[Any] | None:
         value = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
         if isinstance(value, list):
             return value
-    except (ValueError, UnicodeDecodeError):
+    except ValueError:  # binascii.Error and UnicodeDecodeError are ValueErrors too
         pass
     raise Problem(
         "validation_failed",

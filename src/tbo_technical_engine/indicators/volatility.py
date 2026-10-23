@@ -146,15 +146,27 @@ class _SupertrendState:
         if not self.started:
             self.upper, self.lower, self.direction, self.started = basic_upper, basic_lower, 1.0, True
         else:
-            upper = basic_upper if basic_upper < self.upper or self.prev_close > self.upper else self.upper
-            lower = basic_lower if basic_lower > self.lower or self.prev_close < self.lower else self.lower
-            if self.direction < 0:
-                self.direction = 1.0 if close > upper else -1.0
-            else:
-                self.direction = -1.0 if close < lower else 1.0
+            upper, lower = self._carried(basic_upper, basic_lower)
+            self.direction = self._direction(close, upper, lower)
             self.upper, self.lower = upper, lower
         self.prev_close = close
         return (self.lower if self.direction > 0 else self.upper), self.direction
+
+    def _carried(self, basic_upper: float, basic_lower: float) -> tuple[float, float]:
+        """The final bands: a band only tightens, unless the previous close crossed it."""
+        upper = self.upper
+        if basic_upper < self.upper or self.prev_close > self.upper:
+            upper = basic_upper
+        lower = self.lower
+        if basic_lower > self.lower or self.prev_close < self.lower:
+            lower = basic_lower
+        return upper, lower
+
+    def _direction(self, close: float, upper: float, lower: float) -> float:
+        """Down trend flips up on a close above the upper band; up trend flips down on a close below the lower."""
+        if self.direction < 0:
+            return 1.0 if close > upper else -1.0
+        return -1.0 if close < lower else 1.0
 
 
 class _SupertrendStream:
