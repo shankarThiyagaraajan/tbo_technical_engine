@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 import pytest
 from sqlalchemy import delete
+from tbo_platform_kit.http_client import UpstreamUnavailable
 from tbo_platform_kit.testing import TestKeys
 from tbo_signals import ManifestError, load_manifest
 from tbo_signals.config.constants import Level
@@ -244,7 +245,7 @@ async def test_a_swing_run_reports_its_activity_and_a_failed_one_its_error(world
 
     broken = world.service(lambda request: httpx.Response(500))
     broken.signals = signals
-    with pytest.raises(Exception):  # noqa: B017  # whatever the fake universe's failure raises
+    with pytest.raises(UpstreamUnavailable):  # the fake fundamental engine answers 500
         await broken.run("morning", DAY)
     assert get("tbo_technical_swing_snapshot_last_error_seconds", {"run": "morning"})
 

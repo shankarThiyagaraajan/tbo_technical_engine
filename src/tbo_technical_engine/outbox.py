@@ -13,11 +13,12 @@ row's fault: it stops the sweep and counts nothing.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from redis.exceptions import ResponseError
-from sqlalchemy import func, select, update
+from sqlalchemy import Row, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tbo_contracts import validate_event
 from tbo_platform_kit.events import stream_of
@@ -76,48 +77,88 @@ async def flush(
     failed: set[str] = set()
     while True:
         async with sessions() as session, session.begin():
-            rows = (
-                await session.execute(
-                    select(outbox.c.event_id, outbox.c.stream, outbox.c.payload, outbox.c.attempts)
-                    .where(
-                        outbox.c.published_at.is_(None), outbox.c.dead_at.is_(None), outbox.c.event_id.not_in(failed)
-                    )
-                    .order_by(outbox.c.created_at)
-                    .limit(BATCH)
-                    .with_for_update(skip_locked=True)
-                )
-            ).all()
-            for row in rows:
-                try:
-                    await publisher.publish(row.stream, json.loads(row.payload))
-                except Exception as exc:  # whatever Redis or the payload did, it is sorted below
-                    error = type(exc).__name__
-                    if not _is_row_fault(exc):
-                        log.warning("outbox_publish_deferred", error=error)
-                        return published  # Redis is the problem, not the rows: try again next sweep, count nothing
-                    failed.add(row.event_id)
-                    attempts = (row.attempts or 0) + (1 if count_attempts else 0)
-                    dead = datetime.now(UTC) if attempts >= MAX_ATTEMPTS else None
-                    await session.execute(
-                        update(outbox)
-                        .where(outbox.c.event_id == row.event_id)
-                        .values(attempts=attempts, last_error=f"{error}: {exc}"[:500], dead_at=dead)
-                    )
-                    if dead:
-                        log.error("outbox_row_left_behind", event_id=row.event_id, attempts=attempts, error=error)
-                    else:
-                        log.warning("outbox_publish_failed", event_id=row.event_id, attempt=attempts, error=error)
-                    continue
-                await session.execute(
-                    update(outbox).where(outbox.c.event_id == row.event_id).values(published_at=datetime.now(UTC))
-                )
-                published += 1
-                if signals is not None:
-                    signals.emit("technical.signal_events", 1)
+            rows = await _batch(session, failed)
+            done, deferred = await _publish_rows(
+                session, publisher, rows, failed, signals, count_attempts=count_attempts
+            )
+        published += done
+        if deferred:
+            return published  # Redis is the problem, not the rows: try again next sweep, count nothing
         if len(rows) < BATCH:
             if published:
                 log.info("outbox_flushed", published=published)
             return published
+
+
+async def _publish_rows(
+    session: AsyncSession,
+    publisher: Publisher,
+    rows: Sequence[Row[Any]],
+    failed: set[str],
+    signals: Signals | None,
+    *,
+    count_attempts: bool,
+) -> tuple[int, bool]:
+    """Publish one batch in order: how many were published, and whether Redis deferred the rest of the sweep."""
+    published = 0
+    for row in rows:
+        outcome = await _publish_one(session, publisher, row, count_attempts=count_attempts)
+        if outcome == "deferred":
+            return published, True
+        if outcome == "row_fault":
+            failed.add(row.event_id)
+            continue
+        published += 1
+        if signals is not None:
+            signals.emit("technical.signal_events", 1)
+    return published, False
+
+
+async def _batch(session: AsyncSession, failed: set[str]) -> Sequence[Row[Any]]:
+    """The next oldest unpublished rows, locked; rows that failed in this sweep are left out."""
+    return (
+        await session.execute(
+            select(outbox.c.event_id, outbox.c.stream, outbox.c.payload, outbox.c.attempts)
+            .where(outbox.c.published_at.is_(None), outbox.c.dead_at.is_(None), outbox.c.event_id.not_in(failed))
+            .order_by(outbox.c.created_at)
+            .limit(BATCH)
+            .with_for_update(skip_locked=True)
+        )
+    ).all()
+
+
+async def _publish_one(
+    session: AsyncSession, publisher: Publisher, row: Row[Any], *, count_attempts: bool
+) -> Literal["published", "row_fault", "deferred"]:
+    """Publish one row and mark it; a row fault is recorded on the row, any other failure defers the whole sweep."""
+    try:
+        await publisher.publish(row.stream, json.loads(row.payload))
+    except Exception as exc:  # whatever Redis or the payload did, it is sorted below
+        if not _is_row_fault(exc):
+            log.warning("outbox_publish_deferred", error=type(exc).__name__)
+            return "deferred"
+        await _record_row_fault(session, row, exc, count_attempts=count_attempts)
+        return "row_fault"
+    await session.execute(
+        update(outbox).where(outbox.c.event_id == row.event_id).values(published_at=datetime.now(UTC))
+    )
+    return "published"
+
+
+async def _record_row_fault(session: AsyncSession, row: Row[Any], exc: Exception, *, count_attempts: bool) -> None:
+    """Keep the error on the row, count the attempt (sweeps only), and leave it behind at MAX_ATTEMPTS."""
+    error = type(exc).__name__
+    attempts = (row.attempts or 0) + (1 if count_attempts else 0)
+    dead = datetime.now(UTC) if attempts >= MAX_ATTEMPTS else None
+    await session.execute(
+        update(outbox)
+        .where(outbox.c.event_id == row.event_id)
+        .values(attempts=attempts, last_error=f"{error}: {exc}"[:500], dead_at=dead)
+    )
+    if dead:
+        log.error("outbox_row_left_behind", event_id=row.event_id, attempts=attempts, error=error)
+    else:
+        log.warning("outbox_publish_failed", event_id=row.event_id, attempt=attempts, error=error)
 
 
 def _is_row_fault(exc: Exception) -> bool:

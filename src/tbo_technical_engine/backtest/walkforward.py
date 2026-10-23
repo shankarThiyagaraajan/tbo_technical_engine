@@ -59,6 +59,13 @@ def _neighbours(chosen: Combo, others: Sequence[Combo]) -> list[Combo]:
     return [c for c in others if c != chosen and sum(a != b for a, b in zip(c, chosen, strict=True)) == 1]
 
 
+def _choose(eligible: Mapping[Combo, Metrics], base: Combo) -> Combo:
+    """The set with the best train expectancy; ties go to the base set, then to the sorted key; the base when none."""
+    if not eligible:
+        return base
+    return max(eligible, key=lambda c: (eligible[c].expectancy_r, c == base, c))
+
+
 def walk_forward(
     results: Mapping[Combo, Sequence[Trade]], base: Combo, sessions: Sequence[date], settings: WalkForwardSettings
 ) -> WalkForward:
@@ -72,7 +79,7 @@ def walk_forward(
         train_metrics: dict[Combo, Metrics] = {c: summarize(in_window(t, train_days)) for c, t in results.items()}
         eligible = {c: m for c, m in train_metrics.items() if m.trade_count >= settings.min_trades_train}
         # Ties go to the base set (the one in strategies.yaml), then to the sorted key.
-        chosen = max(eligible, key=lambda c: (eligible[c].expectancy_r, c == base, c)) if eligible else base
+        chosen = _choose(eligible, base)
         stable: bool | None = None
         if has_grid:
             best = train_metrics[chosen].expectancy_r

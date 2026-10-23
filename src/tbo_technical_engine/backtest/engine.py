@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, time
 from typing import Literal
 
 from tbo_platform_kit.config.calendar import IST
@@ -61,9 +61,23 @@ class RunOutcome:
 Progress = Callable[[], None]
 
 
+@dataclass(frozen=True)
+class _Grid:
+    """What every stock of one grid run shares: the parameter sets, the range, and the fill and cost rules."""
+
+    configs: Mapping[Combo, StrategyFile]
+    base: Combo
+    start: date
+    end: date
+    windows: list[tuple[time, time]]
+    index_side: IndexSide | None
+    execution: Execution
+    schedule: CostSchedule
+    rules: DayRules | None
+
+
 def run_grid(
     configs: Mapping[Combo, StrategyFile],
-    strategy: str,
     isins: Sequence[str],
     load: Callable[[str], StockData | None],
     start: date,
@@ -84,43 +98,69 @@ def run_grid(
 
     The first entry of `configs` is the file's own parameter set and always runs. After the first stock the others
     are dropped when `first stock's time x number of stocks` would not fit before `deadline`; the second return value
-    then says why (None when everything ran). `load` returns a stock's candles (None: no data); each config has
-    `strategy` active and the others off (`overrides.for_backtest`). `tick` is called once per stock so a caller can
+    then says why (None when everything ran). `load` returns a stock's candles (None: no data); each config has one
+    strategy active and the others off (`overrides.for_backtest`). `tick` is called once per stock so a caller can
     enforce a time budget. `index_side` is the primary index's VWAP side for `vwap_pivot` (None: no index data).
     """
-    outcomes: dict[Combo, RunOutcome] = {combo: RunOutcome() for combo in configs}
     base = next(iter(configs))
-    kept = list(configs)
-    windows = [w for config in configs.values() for w in entry_windows(config)]
+    grid = _Grid(
+        configs=configs,
+        base=base,
+        start=start,
+        end=end,
+        windows=[w for config in configs.values() for w in entry_windows(config)],
+        index_side=index_side,
+        execution=execution,
+        schedule=schedule,
+        rules=rules,
+    )
+    outcomes: dict[Combo, RunOutcome] = {combo: RunOutcome() for combo in configs}
+    clock = monotonic or (lambda: 0.0)
     skipped: str | None = None
     first = True
     for isin in sorted(isins):
         stock = load(isin)  # one stock at a time: 500 stocks of a year of candles do not fit in memory together
-        if stock is None:
-            if tick is not None:
-                tick()
-            continue
-        began = monotonic() if monotonic is not None else 0.0
-        tape = build_tape(configs[base], stock.five, stock.fifteen, stock.daily, start, end, windows, index_side)
-        for combo in kept:
-            _trade_stock(outcomes[combo], configs[combo], tape, isin, stock, execution, schedule, rules)
-        if first and monotonic is not None and len(kept) > 1:
-            first = False
-            took = monotonic() - began
-            if took * len(isins) > deadline - monotonic():
-                skipped = (
-                    f"{len(configs)} parameter sets would not fit in the time budget (the first stock took "
-                    f"{took:.0f} s for all of them, and there are {len(isins)} stocks): walk-forward ran on the "
-                    "fixed parameters"
-                )
-                kept = [base]
-                outcomes = {base: outcomes[base]}
-                # The first stock's trades of the dropped sets are discarded with them.
+        if stock is not None:
+            began = clock()
+            _replay_stock(grid, outcomes, isin, stock)
+            if first and monotonic is not None and len(outcomes) > 1:
+                first = False
+                skipped = _over_budget(clock() - began, len(configs), len(isins), deadline - clock())
+                if skipped is not None:
+                    outcomes = {base: outcomes[base]}  # the first stock's trades of the dropped sets go with them
         if tick is not None:
             tick()
     for out in outcomes.values():
         out.trades.sort(key=lambda t: (t.entry_at, t.isin, t.signal_id))
     return outcomes, skipped
+
+
+def _replay_stock(grid: _Grid, outcomes: dict[Combo, RunOutcome], isin: str, stock: StockData) -> None:
+    """Build the stock's tape once and trade it for every parameter set still in `outcomes`."""
+    tape = build_tape(
+        grid.configs[grid.base],
+        stock.five,
+        stock.fifteen,
+        stock.daily,
+        grid.start,
+        grid.end,
+        grid.windows,
+        grid.index_side,
+    )
+    for combo, out in outcomes.items():
+        _trade_stock(out, grid.configs[combo], tape, isin, stock, grid.execution, grid.schedule, grid.rules)
+
+
+def _over_budget(took: float, sets: int, stocks: int, left: float) -> str | None:
+    """Why the extra parameter sets are dropped, when the first stock's time for all of them, times the stocks, will
+    not fit in the time left; None when it fits."""
+    if took * stocks <= left:
+        return None
+    return (
+        f"{sets} parameter sets would not fit in the time budget (the first stock took "
+        f"{took:.0f} s for all of them, and there are {stocks} stocks): walk-forward ran on the "
+        "fixed parameters"
+    )
 
 
 def _trade_stock(
@@ -159,7 +199,6 @@ def _trade_stock(
 
 def run_strategy(
     config: StrategyFile,
-    strategy: str,
     isins: Sequence[str],
     load: Callable[[str], StockData | None],
     start: date,
@@ -170,7 +209,7 @@ def run_strategy(
     tick: Progress | None = None,
 ) -> RunOutcome:
     """One parameter set over the stocks (`run_grid` with a single set)."""
-    outcomes, _ = run_grid({(): config}, strategy, isins, load, start, end, execution, schedule, rules, tick)
+    outcomes, _ = run_grid({(): config}, isins, load, start, end, execution, schedule, rules, tick)
     return outcomes[()]
 
 

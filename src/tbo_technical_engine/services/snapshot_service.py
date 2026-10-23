@@ -153,13 +153,12 @@ class SnapshotService:
         try:
             summary = await self._run(kind, today)
         except Exception:
-            if self.signals is not None:
-                self.signals.activity("technical.swing_snapshot", False, run=kind)
+            self._activity(False, kind)
             raise
-        if self.signals is not None and summary.skipped in BROKEN_SKIPS:
-            self.signals.activity("technical.swing_snapshot", False, run=kind)  # a missed run must be seen (rule 13)
+        if summary.skipped in BROKEN_SKIPS:
+            self._activity(False, kind)  # a missed run must be seen (rule 13)
         if self.signals is not None and summary.skipped is None:
-            self.signals.activity("technical.swing_snapshot", True, run=kind)
+            self._activity(True, kind)
             self.signals.event("technical.swing_snapshot_finished", summary.snapshots_new, run=kind)
         return summary
 
@@ -167,7 +166,7 @@ class SnapshotService:
         started = clock_time.monotonic()
         summary = Summary(kind)
         try:
-            as_of = await self._session_of(kind, today)
+            as_of = self._session_of(kind, today)
         except Exception as exc:  # the kit's holiday file is empty until the owner fills it
             log.warning("calendar_unavailable", error=type(exc).__name__)
             summary.skipped = "calendar_unavailable"
@@ -234,7 +233,12 @@ class SnapshotService:
         )
         return summary
 
-    async def _session_of(self, kind: Kind, today: date) -> date | None:
+    def _activity(self, ok: bool, kind: Kind) -> None:
+        """One swing run's activity, failed or not (nothing without signals)."""
+        if self.signals is not None:
+            self.signals.activity("technical.swing_snapshot", ok, run=kind)
+
+    def _session_of(self, kind: Kind, today: date) -> date | None:
         """The session the run is as of: today's for the close run, the previous one for the morning refresh."""
         if not self.calendar.is_trading_day(today):
             return None

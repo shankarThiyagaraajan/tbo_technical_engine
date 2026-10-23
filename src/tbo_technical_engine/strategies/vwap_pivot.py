@@ -34,10 +34,8 @@ class VwapPivot(Strategy):
             return None
         lo, hi = min(vwap, level), max(vwap, level)
         near, far = (lo, hi) if d > 0 else (hi, lo)  # `far` is the edge the price must leave through
-        beyond = d * (c - far) > 0
-        touched = d * ((float(candle.low) if d > 0 else float(candle.high)) - far) <= 0
-        rejection = beyond and touched and d * (c - o) > 0
-        broke = beyond and d * (pc - far) <= 0
+        worst = float(candle.low) if d > 0 else float(candle.high)
+        rejection, broke = _entry(d, c, o, pc, worst, far)
         index_known = ctx.index_side is not None
         index_ok = (ctx.index_side == d) if index_known else not p.flag("require_index")
         if not ((rejection or broke) and index_ok):
@@ -69,3 +67,13 @@ class VwapPivot(Strategy):
             components=components,
             indicators={"vwap": vwap, "atr_14": atr, name: level, next_name: nxt},
         )
+
+
+def _entry(d: int, c: float, o: float, pc: float, worst: float, far: float) -> tuple[bool, bool]:
+    """(rejection, broke): the candle reached the zone and closed beyond it in the trade's colour, or it closed beyond
+    after the previous close was not; `worst` is its extreme against the trade, `far` the zone's edge to leave by."""
+    beyond = d * (c - far) > 0
+    touched = d * (worst - far) <= 0
+    rejection = beyond and touched and d * (c - o) > 0
+    broke = beyond and d * (pc - far) <= 0
+    return rejection, broke

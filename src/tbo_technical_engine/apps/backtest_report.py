@@ -29,7 +29,7 @@ from tbo_platform_kit.http_client import IssuerTokenProvider, ServiceClient
 from tbo_technical_engine.backtest.costs import load_costs
 from tbo_technical_engine.backtest.engine import DayRules
 from tbo_technical_engine.backtest.index_side import PRIMARY_INDEX, index_sides
-from tbo_technical_engine.backtest.study import Study, run_study
+from tbo_technical_engine.backtest.study import Study, StudyData, run_study
 from tbo_technical_engine.backtest.summary import render
 from tbo_technical_engine.clients import fundamental
 from tbo_technical_engine.config.settings import Settings
@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     for name in names:
         began = time.monotonic()
         studies[name] = run_study(
-            file, name, [], None, isins, cache.stock, sessions, args.start, args.end, settings, costs, rules,
+            file, name, [], None, StudyData(isins, cache.stock, sessions, args.start, args.end), settings, costs, rules,
             monotonic=time.monotonic, deadline=float("inf"), index_side=index_side,
         )  # fmt: skip
         print(f"{name}: {len(studies[name].trades)} trades in {time.monotonic() - began:.0f} s", file=sys.stderr)

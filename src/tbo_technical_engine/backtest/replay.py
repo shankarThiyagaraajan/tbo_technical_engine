@@ -90,17 +90,30 @@ def build_tape(
         while next_daily < len(pending_daily) and day_of(pending_daily[next_daily]) < d:
             buffer.add(pending_daily[next_daily])
             next_daily += 1
-        # Closing order; a 5-minute candle before a 15-minute one that closes at the same instant (as the feed sends).
-        events = sorted(by_day[d], key=lambda c: (c.start_at + length(c.timeframe), c.timeframe != "5m"))
-        for candle in events:
-            buffer.add(candle)
-            if candle.timeframe != "5m":
-                continue
-            steps.append((candle, candle.start_at + timedelta(minutes=5, seconds=1)))
-            closes = (candle.start_at + length("5m")).astimezone(IST).time()
-            if any(opens <= closes <= until for opens, until in windows):
-                contexts[candle.start_at] = evaluator.context(candle)
+        _replay_day(by_day[d], buffer, evaluator, windows, steps, contexts)
     return Tape(steps, contexts)
+
+
+def _replay_day(
+    candles: list[Candle],
+    buffer: CandleBuffer,
+    evaluator: StrategyEvaluator,
+    windows: Sequence[tuple[time, time]],
+    steps: list[tuple[Candle, datetime]],
+    contexts: dict[datetime, Context | None],
+) -> None:
+    """One session's candles into the buffer in closing order, with a step per 5-minute candle and a context for each
+    one that closes inside an entry window."""
+    # Closing order; a 5-minute candle before a 15-minute one that closes at the same instant (as the feed sends).
+    events = sorted(candles, key=lambda c: (c.start_at + length(c.timeframe), c.timeframe != "5m"))
+    for candle in events:
+        buffer.add(candle)
+        if candle.timeframe != "5m":
+            continue
+        steps.append((candle, candle.start_at + timedelta(minutes=5, seconds=1)))
+        closes = (candle.start_at + length("5m")).astimezone(IST).time()
+        if any(opens <= closes <= until for opens, until in windows):
+            contexts[candle.start_at] = evaluator.context(candle)
 
 
 def replay_tape(config: StrategyFile, tape: Tape) -> list[SignalCandidate]:

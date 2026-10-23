@@ -47,7 +47,7 @@ from tbo_platform_kit.config.calendar import IST
 
 from tbo_technical_engine.backtest.costs import load_costs
 from tbo_technical_engine.backtest.replay import replay_stock
-from tbo_technical_engine.backtest.study import run_study
+from tbo_technical_engine.backtest.study import StudyData, run_study
 from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.schemas.synthetic import SyntheticSpec, isin_of
 from tbo_technical_engine.services.backtests import load_settings
@@ -125,9 +125,17 @@ def sweep_mode(args: argparse.Namespace) -> dict[str, Any]:
             continue
         began = time.perf_counter()
         study = run_study(
-            file, name, [], None, isins, cache.stock, sessions, days[args.warmup], days[-1], settings, costs, None,
-            monotonic=time.monotonic, deadline=float("inf"),
-        )  # fmt: skip
+            file,
+            name,
+            [],
+            None,
+            StudyData(isins, cache.stock, sessions, days[args.warmup], days[-1]),
+            settings,
+            costs,
+            None,
+            monotonic=time.monotonic,
+            deadline=float("inf"),
+        )
         took = time.perf_counter() - began
         total += took
         sets = max(1, len(study.grid) and _grid_size(study.grid))

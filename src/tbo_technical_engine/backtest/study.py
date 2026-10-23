@@ -46,16 +46,24 @@ class Study:
     """True when the primary index's candles were there, so `vwap_pivot`'s index filter ran as live (ADR-019)."""
 
 
+@dataclass(frozen=True)
+class StudyData:
+    """The stocks and range a study runs over: `load` returns a stock's candles (None: no data), `sessions_by_isin` the
+    dates each stock has 5-minute candles on."""
+
+    isins: Sequence[str]
+    load: Callable[[str], StockData | None]
+    sessions_by_isin: Mapping[str, set[date]]
+    start: date
+    end: date
+
+
 def run_study(
     file: StrategyFile,
     strategy: str,
     overrides: Sequence[ParamOverride],
     params_version: str | None,
-    isins: Sequence[str],
-    load: Callable[[str], StockData | None],
-    sessions_by_isin: Mapping[str, set[date]],
-    start: date,
-    end: date,
+    data: StudyData,
     settings: BacktestSettings,
     costs: CostSchedule,
     rules: DayRules | None,
@@ -69,7 +77,8 @@ def run_study(
     for all sets times the number of stocks must fit before `deadline`, else the walk-forward uses the fixed parameters
     and the result says why."""
     config = for_backtest(file, strategy, overrides, params_version)
-    cover, sessions = coverage(sessions_by_isin, len(isins), start, end, gate_applied=rules is not None)
+    isins, start, end = data.isins, data.start, data.end
+    cover, sessions = coverage(data.sessions_by_isin, len(isins), start, end, gate_applied=rules is not None)
     base_params = config.strategies[strategy].params
     grid = settings.grids.get(strategy, {}) if not overrides else {}
     base_combo: Combo = tuple((n, str(base_params[n])) for n in sorted(grid))
@@ -83,7 +92,7 @@ def run_study(
         for combo in sorted(all_combos, key=lambda c: c != base_combo)  # the file's own parameters first
     }
     outcomes, skipped = run_grid(
-        configs, strategy, isins, load, start, end, settings.execution, costs, rules, tick,
+        configs, isins, data.load, start, end, settings.execution, costs, rules, tick,
         monotonic=monotonic, deadline=deadline, index_side=index_side,
     )  # fmt: skip
     runs: dict[Combo, list[Trade]] = {combo: out.trades for combo, out in outcomes.items()}

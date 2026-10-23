@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
 from tbo_technical_engine import indicators
@@ -88,8 +88,7 @@ def test_vwap_lies_between_the_session_low_and_high(rows: BarRows, per_session: 
 def test_no_look_ahead_changing_a_later_bar_never_changes_an_earlier_value(
     rows: BarRows, per_session: int, data: st.DataObject
 ) -> None:
-    if len(rows) < 2:
-        return
+    assume(len(rows) >= 2)  # one bar has no later bar to change
     cut = data.draw(st.integers(1, len(rows) - 1))
     tampered = rows[:cut] + [(r[0] * 2, r[1] * 3, r[2], r[3] * 2, r[4] + 7) for r in rows[cut:]]
     a, b = from_ohlcv(rows, per_session=per_session), from_ohlcv(tampered, per_session=per_session)

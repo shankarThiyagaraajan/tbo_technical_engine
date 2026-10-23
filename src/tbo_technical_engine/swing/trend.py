@@ -53,23 +53,33 @@ def assess(bars: Bars, p: TrendParams) -> Trend:
 
     w = p.weights
     checks: list[tuple[float, bool | None]] = [
-        (w.close_above_fast, close > fast if math.isfinite(fast) else None),
-        (w.close_above_mid, close > mid if math.isfinite(mid) else None),
-        (w.fast_above_mid, fast > mid if math.isfinite(fast) and math.isfinite(mid) else None),
-        (w.mid_above_slow, mid > slow if math.isfinite(mid) and math.isfinite(slow) else None),
-        (w.mid_rising, rising if math.isfinite(mid) else None),
-        (w.di_bullish, plus > minus if math.isfinite(plus) and math.isfinite(minus) else None),
+        (w.close_above_fast, _known(close > fast, fast)),
+        (w.close_above_mid, _known(close > mid, mid)),
+        (w.fast_above_mid, _known(fast > mid, fast, mid)),
+        (w.mid_above_slow, _known(mid > slow, mid, slow)),
+        (w.mid_rising, _known(rising, mid)),
+        (w.di_bullish, _known(plus > minus, plus, minus)),
     ]
     available = sum(weight for weight, ok in checks if ok is not None)
     earned = sum(weight for weight, ok in checks if ok)
     bull = 100.0 * earned / available if available > 0 else 50.0
     adx_now = float(adx[f"adx_{p.adx_period}"][-1])
     trending = not math.isfinite(adx_now) or adx_now >= p.adx_min
-    state: TrendState = "sideways"
-    if trending and bull >= p.up_at:
-        state = "up"
-    elif trending and bull <= p.down_at:
-        state = "down"
+    state = _state(bull, p) if trending else "sideways"
     weight = min(1.0, adx_now / p.adx_full) if math.isfinite(adx_now) else 1.0
     score = min(100, max(0, round(abs(bull - 50.0) * 2.0 * weight)))
     return Trend(state, score, bull, fast, mid, slow, bool(rising))
+
+
+def _known(result: bool | None, *inputs: float) -> bool | None:
+    """`result` when every input is a number; None (the check is left out of the score) when one is nan."""
+    return result if all(math.isfinite(x) for x in inputs) else None
+
+
+def _state(bull: float, p: TrendParams) -> TrendState:
+    """A trending stock's state: up or down past the thresholds, sideways between them."""
+    if bull >= p.up_at:
+        return "up"
+    if bull <= p.down_at:
+        return "down"
+    return "sideways"
