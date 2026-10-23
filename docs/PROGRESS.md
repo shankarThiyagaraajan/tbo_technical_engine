@@ -19,7 +19,7 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 | Signals pilot (stage 5) | Merged (PR #11, #12, #14; `make check` clean locally, CI did not run). `config/signals.yaml` declares 11 signals (the six board stages, worker and swing activity, three events); `services/platform_signals.py` builds `Signals` per process; the signal worker, the Celery worker and the API call it; the manifest is served at `GET /v1/signal-manifest` (scope `technical:read`). `tbo_signals` 0.5.0 pinned by tbo_platform_kit commit `aca4999`, `tbo-contracts` 1.16.0 by commit `a3317a2` (untagged, vendored `contract/` the same), kit pinned at `4e92fc0`. **Pending on the laptop:** checking the numbers against `redis-cli` and `psql`; a scrape port for the worker (see Decisions). |
 | Code review 2026-10-18 (numbers 9.x) | Fixed (9.1 ported from platform 2.2; the 9.14 contract wording is in contracts 1.16.0). See "Review fixes" under Decisions. |
 | Code review 2026-10-20 (9.20 to 9.26) | Fixed (PR #28 merged, f96d928; `make check` clean locally, CI did not run): 9.20 memory, 9.21 tools in the image, 9.22 session hours, 9.23 one price scale, 9.25 Redis timeouts, 9.26 grace, universe backoff, prune index. See "Review fixes (2026-10-20)". |
-| SonarQube strict fixes (2026-10-23, FIX-BRIEFS 2.10) | On branch `claude/project-thread-n7y5rv` (PR open; `make check` clean locally, CI did not run). See "SonarQube strict fixes (2026-10-23)". |
+| SonarQube strict fixes (2026-10-23, FIX-BRIEFS 2.10) | Merged (PR #33, fd2d64f; SonarQube passed, 99.7% of changed lines; `make check` clean locally, CI did not run; release request macro). See "SonarQube strict fixes (2026-10-23)". |
 
 ## Decisions
 
