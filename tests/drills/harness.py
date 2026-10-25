@@ -16,7 +16,6 @@ from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.mode import Mode, profile_for
 
 from tbo_technical_engine.apps.signal_worker import SignalWorker
-from tbo_technical_engine.config import latency as cfg
 from tbo_technical_engine.config.settings import Settings
 from tbo_technical_engine.consumers.handlers import CANDLE_STREAM
 from tbo_technical_engine.schemas.candle import Candle, UniverseSnapshot
@@ -127,8 +126,8 @@ async def candidate_ids(sessions: Any) -> list[str]:
 
 
 async def settle(worker: SignalWorker, clock: Clock, index: int, market: Market) -> None:
-    """Move time past boundary `index` and its grace period, then write the rows that are due (what the supervise loop
-    does every 15 s)."""
-    clock.now = market.close_of(index) + cfg.BOUNDARY_GRACE
+    """Move time past boundary `index` and the worker's grace period (it covers the evaluated candle age, review 9.26),
+    then write the rows that are due (what the supervise loop does every 15 s)."""
+    clock.now = market.close_of(index) + worker.tracker.grace
     worker.latency.add(worker.tracker.close_due(len(worker.universe.isins), worker.readiness.feed_healthy))
     await worker.latency.flush()

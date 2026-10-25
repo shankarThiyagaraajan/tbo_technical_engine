@@ -49,3 +49,18 @@ async def test_prune_deletes_by_age_and_is_idempotent(sessions: Any) -> None:
         assert await store.prune(session, T0 - timedelta(days=14)) == 0
         got = await store.latest(session, ISIN_A, "5m")
         assert got is not None and got.candle_start_at == T0 + timedelta(minutes=5)
+
+
+async def test_the_tables_that_grow_every_session_have_the_indexes_their_reads_and_prune_use(sessions: Any) -> None:
+    """9.26: the 02:30 prune deletes indicator rows by `computed_at`; `for_day` reads boundary rows by `trade_date`."""
+    from sqlalchemy import text
+
+    from tbo_technical_engine.store.tables import evaluation_boundary, indicator_snapshot
+
+    query = text("SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'technical'")
+    async with sessions() as session:
+        found = {str(name): str(definition) for name, definition in (await session.execute(query)).all()}
+    assert "(computed_at)" in found["ix_indicator_snapshot_computed_at"]
+    assert "(trade_date)" in found["ix_evaluation_boundary_trade_date"]
+    declared = {i.name for t in (indicator_snapshot, evaluation_boundary) for i in t.indexes}
+    assert declared == {"ix_indicator_snapshot_computed_at", "ix_evaluation_boundary_trade_date"}

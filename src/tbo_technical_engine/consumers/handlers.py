@@ -28,6 +28,7 @@ FEED_STREAM = "tbo.market_feed.feed"
 UNIVERSE_STREAM = "tbo.fundamental.universe"
 CALENDAR_STREAM = "tbo.filings.market_calendar"
 INDEX_STREAM = "tbo.market_feed.index_candle"
+WORKER_SIGNAL = "technical.worker"  # the signal worker's activity, one `worker` label per consumer
 
 
 class RecreatingConsumer(EventConsumer):
@@ -88,7 +89,7 @@ def feed_consumer(
     async def handle(event: dict[str, Any], session: AsyncSession | None) -> None:
         readiness.on_feed_status(FeedStatus.model_validate(event["data"]))
         if signals is not None:
-            signals.activity("technical.worker", True, worker="feed")
+            signals.activity(WORKER_SIGNAL, True, worker="feed")
 
     return RecreatingConsumer(
         redis, profile, stream=FEED_STREAM, group="technical.feed", consumer=name, handler=handle, metrics=metrics
@@ -120,7 +121,7 @@ def universe_consumer(
             if on_dropped is not None and dropped:
                 on_dropped(dropped)
         if signals is not None:
-            signals.activity("technical.worker", True, worker="universe")
+            signals.activity(WORKER_SIGNAL, True, worker="universe")
 
     return RecreatingConsumer(
         redis,
@@ -168,7 +169,7 @@ def index_consumer(
     async def handle(event: dict[str, Any], session: AsyncSession | None) -> None:
         source.offer(IndexCandle.model_validate(event["data"]))
         if signals is not None:
-            signals.activity("technical.worker", True, worker="indices")
+            signals.activity(WORKER_SIGNAL, True, worker="indices")
 
     return RecreatingConsumer(
         redis,

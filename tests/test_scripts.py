@@ -30,7 +30,9 @@ def test_the_sweep_benchmark_runs_a_grid_over_a_synthetic_cache(
 
 
 def test_the_digests_are_repeatable() -> None:
-    assert identity_check.digests(2, 3) == identity_check.digests(2, 3)
+    first = identity_check.digests(2, 3)
+    second = identity_check.digests(2, 3)
+    assert first == second
 
 
 def test_the_jit_on_and_off_give_identical_digests_on_twenty_stock_sessions() -> None:

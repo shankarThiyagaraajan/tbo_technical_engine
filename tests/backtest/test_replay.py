@@ -62,17 +62,16 @@ def load(_: str) -> StockData:
 
 def test_every_candidate_becomes_a_trade_or_is_counted_as_skipped() -> None:
     config = for_backtest(CONFIG, "vwap_pivot", [], None)
-    out = run_strategy(config, "vwap_pivot", [ISIN_A], load, FIRST, LAST, SETTINGS.execution, COSTS, None)
+    out = run_strategy(config, [ISIN_A], load, FIRST, LAST, SETTINGS.execution, COSTS, None)
     assert out.candidates == len(out.trades) + out.unfilled_or_invalid + out.skipped_busy + out.gated_out
     assert out.trades
 
 
 def test_one_position_per_stock_skips_a_signal_while_a_trade_is_open() -> None:
     config = for_backtest(CONFIG, "vwap_pivot", [], None)
-    one = run_strategy(config, "vwap_pivot", [ISIN_A], load, FIRST, LAST, SETTINGS.execution, COSTS, None)
+    one = run_strategy(config, [ISIN_A], load, FIRST, LAST, SETTINGS.execution, COSTS, None)
     many = run_strategy(
         config,
-        "vwap_pivot",
         [ISIN_A],
         load,
         FIRST,
@@ -95,7 +94,7 @@ def test_the_gate_decides_which_sides_trade_and_a_stock_outside_the_universe_doe
 
     def run(status: str) -> RunOutcome:
         rules = DayRules({d: ({ISIN_A: status} if status else {}) for d in days})
-        return run_strategy(config, "vwap_pivot", [ISIN_A], load, FIRST, LAST, execution, COSTS, rules)
+        return run_strategy(config, [ISIN_A], load, FIRST, LAST, execution, COSTS, rules)
 
     both, long_only, short_only, blocked, outside = (
         run("both"),
@@ -112,5 +111,5 @@ def test_the_gate_decides_which_sides_trade_and_a_stock_outside_the_universe_doe
 
 def test_a_day_without_rules_has_no_trades() -> None:
     config = for_backtest(CONFIG, "vwap_pivot", [], None)
-    out = run_strategy(config, "vwap_pivot", [ISIN_A], load, FIRST, LAST, SETTINGS.execution, COSTS, DayRules({}))
+    out = run_strategy(config, [ISIN_A], load, FIRST, LAST, SETTINGS.execution, COSTS, DayRules({}))
     assert out.candidates > 0 and not out.trades

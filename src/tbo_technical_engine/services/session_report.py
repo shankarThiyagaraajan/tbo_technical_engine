@@ -16,10 +16,11 @@ from tbo_technical_engine.schemas.latency import BoundaryLatency, SessionReport
 from tbo_technical_engine.services.latency import trading_day_boundaries
 
 
-def report(day: date, rows: Iterable[BoundaryLatency]) -> SessionReport:
-    """The report of `day` from its rows (rows of other days are ignored)."""
+def report(day: date, rows: Iterable[BoundaryLatency], expected: int | None = None) -> SessionReport:
+    """The report of `day` from its rows (rows of other days are ignored). `expected` is the session's boundary count
+    (`trading_day_boundaries` of the calendar's window: fewer on a day with a delayed open); the usual 75 by default."""
     mine = [r for r in rows if r.trade_date == day]
-    expected = trading_day_boundaries(day)
+    expected = trading_day_boundaries(day) if expected is None else expected
     slow = [r for r in mine if r.p95_seconds is not None and r.p95_seconds > cfg.TARGET_P95_SECONDS]
     missed = sum(r.missed for r in mine)
     missing = max(expected - len(mine), 0)

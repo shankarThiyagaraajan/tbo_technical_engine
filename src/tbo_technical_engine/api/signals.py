@@ -20,8 +20,9 @@ from tbo_technical_engine.store import signals as signals_store
 from tbo_technical_engine.utils import paging
 from tbo_technical_engine.utils.timefmt import parse_z, z
 
-ISIN = re.compile(r"^IN[A-Z0-9]{9}[0-9]$")
+ISIN = re.compile(r"^IN[A-Z\d]{9}\d$", re.ASCII)  # ASCII: a digit of another script is no ISIN digit
 ULID = re.compile(r"^[0-7][0-9A-HJKMNP-TV-Z]{25}$")
+READ = "technical:read"
 
 router = APIRouter()
 
@@ -32,7 +33,7 @@ async def get_indicators(
     isin: str,
     timeframe: Annotated[Timeframe, Query()] = "5m",  # type: ignore[assignment]
     names: Annotated[str | None, Query(max_length=1200)] = None,
-    caller: Claims = requires("technical:read"),
+    caller: Claims = requires(READ),
 ) -> dict[str, Any]:
     """The values at the last evaluated closed candle. 404 for a stock that has none (not in the universe, or not
     evaluated yet today)."""
@@ -64,7 +65,7 @@ async def list_signals(
     date: Annotated[date_type | None, Query()] = None,
     isin: Annotated[str | None, Query()] = None,
     strategy: Annotated[str | None, Query(pattern=r"^[a-z][a-z0-9]*(_[a-z0-9]+)*$", max_length=60)] = None,
-    caller: Claims = requires("technical:read"),
+    caller: Claims = requires(READ),
 ) -> dict[str, Any]:
     """Candidates of one trade day (default today, IST), newest first."""
     if isin is not None and not ISIN.fullmatch(isin):
@@ -94,7 +95,7 @@ async def list_signals(
 
 
 @router.get("/v1/signals/{signal_id}")
-async def get_signal(request: Request, signal_id: str, caller: Claims = requires("technical:read")) -> dict[str, Any]:
+async def get_signal(request: Request, signal_id: str, caller: Claims = requires(READ)) -> dict[str, Any]:
     """One stored candidate by its ULID; 404 `not_found` when there is none."""
     if not ULID.fullmatch(signal_id):
         raise Problem("validation_failed", "Not a signal ID.", errors=[{"field": "signal_id", "message": "not a ULID"}])

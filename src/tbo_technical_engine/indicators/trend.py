@@ -26,38 +26,45 @@ class _AdxState:
 
     def step(self, high: float, low: float, close: float) -> tuple[float, float, float]:
         """Consume one bar; returns (adx, plus_di, minus_di), nan while warming up."""
-        n = self.n
         plus_di = minus_di = NAN
         if self.count > 0:
             up, down = high - self.prev_high, self.prev_low - low
             plus = up if (up > 0 and up > down) else 0.0
             minus = down if (down > 0 and up < down) else 0.0
             tr = true_range(high, low, self.prev_close)
-            if self.count < n:  # bars 1..n-1: plain sums
+            if self.count < self.n:  # bars 1..n-1: plain sums
                 self.plus_dm += plus
                 self.minus_dm += minus
                 self.tr += tr
             else:  # bar n onwards: Wilder smoothing
-                self.plus_dm = self.plus_dm - self.plus_dm / n + plus
-                self.minus_dm = self.minus_dm - self.minus_dm / n + minus
-                self.tr = self.tr - self.tr / n + tr
-                if self.tr != 0:
-                    plus_di = 100.0 * (self.plus_dm / self.tr)
-                    minus_di = 100.0 * (self.minus_dm / self.tr)
-                else:
-                    plus_di = minus_di = 0.0
-                total = plus_di + minus_di
-                dx = 100.0 * (abs(minus_di - plus_di) / total) if total != 0 else 0.0
-                if self.dx_count < n:
-                    self.dx_sum += dx
-                    self.dx_count += 1
-                    if self.dx_count == n:
-                        self.adx = self.dx_sum / n
-                else:
-                    self.adx = (self.adx * (n - 1) + dx) / n
+                plus_di, minus_di = self._smoothed(plus, minus, tr)
+                self._add_dx(plus_di, minus_di)
         self.count += 1
         self.prev_high, self.prev_low, self.prev_close = high, low, close
         return self.adx, plus_di, minus_di
+
+    def _smoothed(self, plus: float, minus: float, tr: float) -> tuple[float, float]:
+        """Wilder-smooth the directional movements and the true range; returns (+DI, -DI)."""
+        n = self.n
+        self.plus_dm = self.plus_dm - self.plus_dm / n + plus
+        self.minus_dm = self.minus_dm - self.minus_dm / n + minus
+        self.tr = self.tr - self.tr / n + tr
+        if self.tr == 0:
+            return 0.0, 0.0
+        return 100.0 * (self.plus_dm / self.tr), 100.0 * (self.minus_dm / self.tr)
+
+    def _add_dx(self, plus_di: float, minus_di: float) -> None:
+        """The bar's DX: the first n are averaged into the first ADX, later ones Wilder-smoothed into it."""
+        n = self.n
+        total = plus_di + minus_di
+        dx = 100.0 * (abs(minus_di - plus_di) / total) if total != 0 else 0.0
+        if self.dx_count < n:
+            self.dx_sum += dx
+            self.dx_count += 1
+            if self.dx_count == n:
+                self.adx = self.dx_sum / n
+        else:
+            self.adx = (self.adx * (n - 1) + dx) / n
 
 
 class Adx(Indicator):

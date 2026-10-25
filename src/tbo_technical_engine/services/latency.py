@@ -32,15 +32,39 @@ MAX_ROWS_WAITING = 2_000
 """Rows kept while the database is unreachable (about 25 sessions of boundaries); the oldest go first."""
 
 
-def session_boundaries(day: date) -> list[datetime]:
-    """The 75 closes of the day's 5-minute candles, UTC, oldest first (a weekday calendar; callers check holidays)."""
-    first = datetime.combine(day, cfg.FIRST_CLOSE, tzinfo=IST)
-    last = datetime.combine(day, cfg.LAST_CLOSE, tzinfo=IST)
+Window = tuple[datetime, datetime]
+"""A session's continuous-trading window, (open, close), UTC."""
+
+
+def regular_window(calendar: TradingCalendar, day: date) -> Window | None:
+    """The day's continuous-trading window from the calendar (a timing change, such as a delayed open, moves it), or
+    None when the market is closed or the day is a special session (review 9.22).
+
+    A special session (a Muhurat hour in the evening, possibly on a Saturday) is not a TE8 session: no strategy entry
+    window falls in it and the decision engine makes no call on it, so it gets no boundary rows, no market context and
+    no place in the clean-sessions streak; before, it was expected to have 75 boundaries from 09:20 and every one of
+    them was written as `absent` for the whole universe. Raises `CalendarUnknown` as the calendar does.
+    """
+    session = calendar.session(day)
+    if session is None or session.special is not None:
+        return None
+    return session.normal
+
+
+def session_boundaries(day: date, window: Window | None = None) -> list[datetime]:
+    """The closes of the day's 5-minute candles in `window`, UTC, oldest first: 75 for the usual 09:15 to 15:30, which
+    is the window when none is given (`regular_window` gives the calendar's)."""
     step = timedelta(minutes=cfg.BOUNDARY_MINUTES)
+    if window is None:
+        window = (
+            datetime.combine(day, cfg.FIRST_CLOSE, tzinfo=IST).astimezone(UTC) - step,
+            datetime.combine(day, cfg.LAST_CLOSE, tzinfo=IST).astimezone(UTC),
+        )
+    opens, closes = window
     out: list[datetime] = []
-    at = first
-    while at <= last:
-        out.append(at.astimezone(UTC))
+    at = opens.astimezone(UTC) + step
+    while at <= closes:
+        out.append(at)
         at += step
     return out
 
@@ -71,9 +95,15 @@ class _Boundary:
 class LatencyTracker:
     """Collects outcomes in memory and turns closed boundaries into rows."""
 
-    def __init__(self, calendar: TradingCalendar, clock: Callable[[], datetime]) -> None:
+    def __init__(
+        self, calendar: TradingCalendar, clock: Callable[[], datetime], grace: timedelta = cfg.BOUNDARY_GRACE
+    ) -> None:
         self.calendar = calendar
         self.clock = clock
+        self.grace = grace
+        """How long a boundary stays open for late candles. The worker passes at least the age up to which a candle is
+        still evaluated (`max_candle_age_seconds`), so a candle that is evaluated is also counted, never `absent`
+        (review 9.26)."""
         self._open: dict[datetime, _Boundary] = {}
         self._written: set[datetime] = set()
         self.since = clock()
@@ -99,16 +129,17 @@ class LatencyTracker:
         stocks, nothing to miss)."""
         now = self.clock()
         today = now.astimezone(IST).date()
-        if expected == 0 or not self.calendar.is_trading_day(today):
+        window = regular_window(self.calendar, today) if expected else None
+        if window is None:
             return []
         rows: list[BoundaryLatency] = []
-        for boundary in session_boundaries(today):
-            if boundary in self._written or boundary + cfg.BOUNDARY_GRACE > now or boundary <= self.since:
+        for boundary in session_boundaries(today, window):
+            if boundary in self._written or boundary + self.grace > now or boundary <= self.since:
                 continue
             seen = self._open.pop(boundary, _Boundary())
             rows.append(self._row(boundary, seen, expected, feed_healthy, now))
             self._written.add(boundary)
-        stale = [b for b in self._open if b + cfg.BOUNDARY_GRACE <= now]
+        stale = [b for b in self._open if b + self.grace <= now]
         for boundary in stale:  # a boundary of another day or outside the session: never written, so do not keep it
             del self._open[boundary]
         return rows
@@ -163,15 +194,17 @@ class LatencyRecorder:
             return 0
 
 
-def trading_day_boundaries(day: date) -> int:
-    """How many boundaries a full session has (75): the denominator of a session report."""
-    return len(session_boundaries(day))
+def trading_day_boundaries(day: date, window: Window | None = None) -> int:
+    """How many boundaries a full session in `window` has (75 for 09:15 to 15:30): the denominator of a session
+    report."""
+    return len(session_boundaries(day, window))
 
 
 __all__ = [
     "LatencyRecorder",
     "LatencyTracker",
     "percentile",
+    "regular_window",
     "session_boundaries",
     "trading_day_boundaries",
 ]

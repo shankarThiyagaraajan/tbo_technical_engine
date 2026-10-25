@@ -21,12 +21,14 @@ from tbo_technical_engine.utils import paging
 from tbo_technical_engine.utils.timefmt import z
 
 ULID = re.compile(r"^[0-7][0-9A-HJKMNP-TV-Z]{25}$")
+READ = "technical:read"
+RESEARCH = "technical:research"  # backtests: start, read, cancel
 
 router = APIRouter()
 
 
 @router.get("/v1/strategies")
-async def list_strategies(request: Request, caller: Claims = requires("technical:read")) -> dict[str, Any]:
+async def list_strategies(request: Request, caller: Claims = requires(READ)) -> dict[str, Any]:
     """Every strategy in the parameter file, active ones first, with the version its candidates carry."""
     file = request.app.state.strategies
     items = [
@@ -51,7 +53,7 @@ async def create_backtest(
     request: Request,
     body: BacktestCreate,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
-    caller: Claims = requires("technical:research"),
+    caller: Claims = requires(RESEARCH),
 ) -> Response:
     """Queue a backtest on the research queue. The caps (stocks, days, concurrent jobs) are in `config/backtest.yaml`;
     a request over them is a 422 or a 429, never queued. The row is written inside the idempotency transaction, the
@@ -80,9 +82,7 @@ async def create_backtest(
 
 
 @router.get("/v1/backtests/{backtest_id}")
-async def get_backtest(
-    request: Request, backtest_id: str, caller: Claims = requires("technical:research")
-) -> dict[str, Any]:
+async def get_backtest(request: Request, backtest_id: str, caller: Claims = requires(RESEARCH)) -> dict[str, Any]:
     """One backtest with its status, coverage and the contract's six metrics."""
     async with request.app.state.sessions() as session:
         row = await _row(session, backtest_id)
@@ -95,7 +95,7 @@ async def list_backtest_trades(
     backtest_id: str,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     cursor: Annotated[str | None, Query(min_length=1, max_length=512)] = None,
-    caller: Claims = requires("technical:research"),
+    caller: Claims = requires(RESEARCH),
 ) -> dict[str, Any]:
     """Trades in entry order; empty until the backtest has succeeded."""
     after = paging.decode(cursor)

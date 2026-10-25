@@ -71,15 +71,10 @@ class CandleIngest:
             return outcomes.STALE
         return None
 
-    def may_evaluate(self, candle: Candle) -> bool:
-        """True only for a 5-minute candle of a universe stock, while the feed is healthy and warm-up is done, and the
-        candle closed less than `max_age` ago (a backlog after a restart is not a signal)."""
-        return candle.timeframe == ENTRY_TIMEFRAME and self.why_not(candle) is None
-
-    async def handle(self, event: dict[str, Any], session: AsyncSession | None) -> None:
+    async def handle(self, event: dict[str, Any], _session: AsyncSession | None) -> None:
         """The EventConsumer handler for `tbo.market_feed.candle.closed.v1`. Idempotent: a redelivery is not stored
         twice, so it is not evaluated twice either."""
-        candle = Candle.model_validate(event["data"])
+        candle = Candle.from_message(event["data"])
         if candle.timeframe not in STORED_TIMEFRAMES or candle.isin not in self.universe:
             return
         if not self.buffer.add(candle):

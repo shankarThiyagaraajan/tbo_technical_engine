@@ -25,8 +25,8 @@ tbo-technical-engine = "tbo_technical_engine.main:main"
 
 [dependency-groups]
 dev = [
-  "pytest>=8.3,<9",
-  "pytest-asyncio>=0.24,<1",
+  "pytest>=9.0.3,<10",
+  "pytest-asyncio>=1.0,<2",
   "ruff==0.11.8",
   "mypy==1.15.0",
   "schemathesis>=4.3,<5",

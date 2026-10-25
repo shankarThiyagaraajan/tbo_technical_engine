@@ -12,12 +12,14 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 | TE3 Intraday strategy engine | Built. The five strategies (`ema_9_21_crossover`, `vwap_breakout`, `orb_15m`, `pivot_supertrend`, `vwap_pivot`), long and short, as pure rules over a context; parameters and `params_version` in `config/strategies.yaml`; entry windows (09:30-14:30 IST, ORB to 11:30) and per-strategy cooldowns (30 min; ORB once a session); cooldown checkpoint in Redis; candidates stored in `signal_candidate` and announced as `signal.candidate.v1` through the outbox; `GET /v1/signals`, `/v1/signals/{id}`, `/v1/strategies`. A replayed or restarted session gives identical candidates (tested). Not done: gate 3 (chart review of 10 recorded sessions) needs real recorded sessions. |
 | TE4 Market context | Built. Breadth over the universe (advancing/declining/unchanged against the previous close), data quality from the feed's health, CPR day class, index states (VWAP side, 15-minute trend) and the VIX change, published as `market.context.v1` every 5 minutes from 09:15 to 15:30 IST (once per boundary, stored in `market_context`); `GET /v1/context` and `/v1/context/history`. **Index data (ADR-019, 2026-10-20):** `services/index_feed.FeedIndexSource` reads the market feed's `index_candle.closed` events (consumer group `technical.indices`) with `GET /v1/index-candles` as the fallback, so index states, VIX and CPR class are filled once the feed's index poll runs; an index with no candles is left out and counted by `technical.index_missing`. Not yet seen on a real session (needs the feed's poll in paper). Exit criterion (5 sessions on time, matched by hand) needs live sessions. |
 | TE6 Swing analysis and daily snapshot | Built (branch `claude/technical-te6-9kz86w`), tested on fixtures and a fake feed with a real PostgreSQL and Redis; no real feed or recorded history yet. `swing/` (pure): trend state and score, relative-strength percentile, support and resistance zones, ATR % and its one-year percentile, volatility regime, Bollinger squeeze, 20-day traded value and a Corwin-Schultz spread estimate, and three long-only setup detectors (base breakout, pullback to the 20 or 50 EMA, 52-week high breakout). `SnapshotService` runs at 16:00 IST (snapshots + setups) and 08:00 IST (snapshot refresh) as Celery tasks on the new `technical.swing` queue; announces `technical.snapshot.v1` and `swing.setup.v1` through the outbox; `GET /v1/snapshots`, `/v1/snapshots/{isin}`, `/v1/swing-setups`. Parameters in `config/swing.yaml`. 500 stocks are measured and ranked in about two seconds (the daily-candle fetch is the rest of the half hour). Exit criterion 2 (30 setups reviewed) is prepared as `docs/swing-review-sample.md` on fixtures; the review on recorded data waits for recorded sessions. |
-| TE5 Backtesting and research | Built (branch `claude/technical-te5-0p6q89`), checked locally only (CI did not run). `POST /v1/backtests`, `GET /v1/backtests/{id}` and `/trades` replace the stubs (scope `technical:research`, `Idempotency-Key`); the job runs on the `technical.research` queue and replays each stock through the live `StrategyEvaluator`, `IndicatorEngine` and `CandleBuffer` (a test proves its candidates equal the live worker's). Fills, exits, slippage and the Indian intraday cost model (`config/costs.yaml`) turn candidates into trades; metrics are in R, after charges. Walk-forward with a parameter grid (`config/backtest.yaml`), out-of-sample reported apart, parameter stability, vectorbt return statistics, per-strategy evidence summary in `strategy_evidence`, caps on stocks, days, stock-days and concurrent jobs, a job time budget, and a Beat sweep that re-sends lost jobs. `scripts/backtest_report.py` writes the Markdown report. **Not done:** the exit criterion (a 12-month report on all five strategies) needs recorded candles and none exist yet, and the costs are a **placeholder** until the owner confirms them (see Decisions and Open items). |
+| TE5 Backtesting and research | Built (branch `claude/technical-te5-0p6q89`), checked locally only (CI did not run). `POST /v1/backtests`, `GET /v1/backtests/{id}` and `/trades` replace the stubs (scope `technical:research`, `Idempotency-Key`); the job runs on the `technical.research` queue and replays each stock through the live `StrategyEvaluator`, `IndicatorEngine` and `CandleBuffer` (a test proves its candidates equal the live worker's). Fills, exits, slippage and the Indian intraday cost model (`config/costs.yaml`) turn candidates into trades; metrics are in R, after charges. Walk-forward with a parameter grid (`config/backtest.yaml`), out-of-sample reported apart, parameter stability, vectorbt return statistics, per-strategy evidence summary in `strategy_evidence`, caps on stocks, days, stock-days and concurrent jobs, a job time budget, and a Beat sweep that re-sends lost jobs. `python -m tbo_technical_engine.apps.backtest_report` writes the Markdown report. **Not done:** the exit criterion (a 12-month report on all five strategies) needs recorded candles and none exist yet, and the costs are a **placeholder** until the owner confirms them (see Decisions and Open items). |
 | TE7 Profiling and Numba | Built on branch `claude/te7-te8-9h7qqj` (ADR `docs/adr/0001-profiling-and-numba.md`). Profiled on a **synthetic market** (`synthetic/`, `scripts/benchmark.py`): replay 8.5x faster, a full sweep 35x faster (331 s to 9.4 s on 2 stocks x 60 sessions, identical trades), live path at 500 stocks p95 0.88 s (was 5.9 s with the same code before priming and the background audit writer). Numba assessed and **not compiled** (no numeric loop dominates); `scripts/identity_check.py` proves JIT on/off identity (20 synthetic sessions in a test). **Pending on real data:** p95 under 2 s on a real session, the walk-forward sweep timed on the mini PC, identity on recorded sessions. |
 | Trading calendar adoption (R5) | Built (merged; `make check` clean locally, CI did not run). `services/market_calendar.py`, the `technical.calendar` consumer, the `calendar` worker label and `technical.calendar_age` signal, kit pinned at `4e92fc0`, tbo-contracts at `39085e3` (1.10.0). Opt-in: with `TBO_TECHNICAL_FILINGS_URL` unset the calendar stays empty (as the empty holiday file was) and one warning is logged. **Pending in tbo_platform:** the grant, the URL and cache lines. |
-| TE8 Hardening | Built on branch `claude/te8-9h7qqj` (on top of TE7). A per-boundary evaluation record (`evaluation_boundary`, migration 0007: evaluated, stale, cold, inactive, failed, absent, p50/p95/max latency, candle close to end of evaluation on the worker's clock), Prometheus gauges set by the API process (the worker has no port), `scripts/session_report.py` (the ten-clean-sessions check), failure drills as tests on a real PostgreSQL and Redis (`tests/drills/`: feed outage, Redis restart with and without its data, worker crash), runbooks and monitoring notes (`docs/runbooks.md`, `docs/monitoring.md`). Found and fixed on the way: the kit's consumer retries a missing group for ever after a Redis restart without data (`consumers/handlers.py` now recreates it and asks for a warm-up). Alert rules, their tests and dashboard panels are a companion `tbo_platform` PR. **Pending on real data: ten consecutive clean sessions and the real p95; nothing here proves either on synthetic data.** |
+| TE8 Hardening | Built on branch `claude/te8-9h7qqj` (on top of TE7). A per-boundary evaluation record (`evaluation_boundary`, migration 0007: evaluated, stale, cold, inactive, failed, absent, p50/p95/max latency, candle close to end of evaluation on the worker's clock), Prometheus gauges set by the API process (the worker has no port), `python -m tbo_technical_engine.apps.session_report` (the ten-clean-sessions check), failure drills as tests on a real PostgreSQL and Redis (`tests/drills/`: feed outage, Redis restart with and without its data, worker crash), runbooks and monitoring notes (`docs/runbooks.md`, `docs/monitoring.md`). Found and fixed on the way: the kit's consumer retries a missing group for ever after a Redis restart without data (`consumers/handlers.py` now recreates it and asks for a warm-up). Alert rules, their tests and dashboard panels are a companion `tbo_platform` PR. **Pending on real data: ten consecutive clean sessions and the real p95; nothing here proves either on synthetic data.** |
 | Signals pilot (stage 5) | Merged (PR #11, #12, #14; `make check` clean locally, CI did not run). `config/signals.yaml` declares 11 signals (the six board stages, worker and swing activity, three events); `services/platform_signals.py` builds `Signals` per process; the signal worker, the Celery worker and the API call it; the manifest is served at `GET /v1/signal-manifest` (scope `technical:read`). `tbo_signals` 0.5.0 pinned by tbo_platform_kit commit `aca4999`, `tbo-contracts` 1.16.0 by commit `a3317a2` (untagged, vendored `contract/` the same), kit pinned at `4e92fc0`. **Pending on the laptop:** checking the numbers against `redis-cli` and `psql`; a scrape port for the worker (see Decisions). |
 | Code review 2026-10-18 (numbers 9.x) | Fixed (9.1 ported from platform 2.2; the 9.14 contract wording is in contracts 1.16.0). See "Review fixes" under Decisions. |
+| Code review 2026-10-20 (9.20 to 9.26) | Fixed (PR #28 merged, f96d928; `make check` clean locally, CI did not run): 9.20 memory, 9.21 tools in the image, 9.22 session hours, 9.23 one price scale, 9.25 Redis timeouts, 9.26 grace, universe backoff, prune index. See "Review fixes (2026-10-20)". |
+| SonarQube strict fixes (2026-10-23, FIX-BRIEFS 2.10) | Merged (PR #33, fd2d64f; SonarQube passed, 99.7% of changed lines; `make check` clean locally, CI did not run; release request macro). See "SonarQube strict fixes (2026-10-23)". |
 
 ## Decisions
 
@@ -33,7 +35,7 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   at T normally carries the index candle that closed at T - 5 minutes; accepted rather than delaying the context (the decision engine's
   latency budget). A lost consumer group asks for the REST history again.
 - **TE5 index filter (review 2.4, 2.6).** A backtest rebuilds nifty_50's VWAP side from the research cache's index candles
-  (`<cache>/indices/5m/nifty_50.parquet`, filled by `scripts/fill_research_cache.py --indices nifty_50`), using the side of the newest
+  (`<cache>/indices/5m/nifty_50.parquet`, filled by `python -m tbo_technical_engine.apps.fill_research_cache --indices nifty_50`), using the side of the newest
   index candle that closed by the entry candle's start (`backtest/index_side.py`; live may lag one candle more). Without those candles a
   study runs as live without index data, and the Markdown report says **Index filter off** in its header. `config/strategies.yaml`
   keeps `require_index: false` until the TE5 re-run with `require_index: true` is seen; switching it is a new `params_version`.
@@ -123,12 +125,49 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
 - **9.3** `SignalRunner` retries the candidate write (`WRITE_RETRY_DELAYS`, 0.25, 1, 2 s) itself: the candle is already in the buffer, so a redelivered event is dropped as a duplicate and the old "retry by redelivery" never existed. After the retries the boundary is lost and shows as FAILED in `evaluation_boundary` and in the `evaluator_failed` log.
 - **9.4** The swing run raises `IncompleteRun` (so Beat retries at +10 min, 3 times) when more than `max_stale_share` (20 %, `config/swing.yaml`) of the universe has no candle for the session. `store.snapshots.serving` skips a session holding under 80 % of the fullest recent session, so a partial day cannot hide a complete one. A run skipped for `no_universe` or `calendar_unavailable` now reports `technical.swing_snapshot` as failed. **Slack alert for it is a rule in tbo_platform (rule 13), not done here.**
 - **9.5** Daily candles are read split-adjusted at warm-up. `services/evaluator.py` does not evaluate a stock whose first 5-minute open is more than 25 % from the previous close (`config/corporate_actions.py`: a split or bonus; intraday candles are not adjusted). Small ratios (5:4 bonus) still slip through; the gate's ex-date flag covers them at the decision engine. The days after the ex-date still carry pre-split prices in the 5-minute EMA, ATR and VWAP average until they age out (about one session).
-- **9.6** `scripts/backtest_report.py` applies the point-in-time gate when `TBO_TECHNICAL_FUNDAMENTAL_URL` is set (`--gate` / `--no-gate`); an ungated report says NOT GATED at the top. `scripts/fill_research_cache.py` (`services/cache_fill.py`) pages the feed's candle history into the cache, so 12 months do not need 12 months of uptime. **Still open in tbo_platform:** a named, writable volume shared by the signal worker and the research worker for `TBO_TECHNICAL_RESEARCH_CACHE_DIR` (no deploy file defines it).
+- **9.6** The backtest report (now `apps/backtest_report.py`) applies the point-in-time gate when `TBO_TECHNICAL_FUNDAMENTAL_URL` is set (`--gate` / `--no-gate`); an ungated report says NOT GATED at the top. The cache fill (now `apps/fill_research_cache.py`, `services/cache_fill.py`) pages the feed's candle history into the cache, so 12 months do not need 12 months of uptime. **Still open in tbo_platform:** a named, writable volume shared by the signal worker and the research worker for `TBO_TECHNICAL_RESEARCH_CACHE_DIR` (no deploy file defines it).
 - **9.7** Previous-session levels (pivots, Camarilla, CPR) and `prev_close` skip special sessions: a session counts only if it opens at 09:15 and its last bar starts at or after 15:00 (`indicators/levels.is_regular`); the previous regular session's levels carry over a Muhurat evening.
 - **9.8** The daily warm-up reads 150 sessions (was 30), so the daily ATR of a restarted worker matches a long-running one and the backtest.
 - **9.9** VWAP breakout needs its "bars below" in today's session. **9.10** Evidence is stored only from gated runs without overrides, so a narrow run cannot replace the broad one. **9.12** A research job does not start if it could run into the 09:00 blackout (it stays queued; the sweep re-sends), stops at the blackout if it overruns, and the backtest cap check is serialised by an advisory lock. **9.13** Indicator streams and cooldowns of stocks that left the universe are dropped (also on the REST universe path). **9.14** This file's pins are current; `numba` is a direct dependency. **9.11** Decision: the previous close for pivots and the gap is the last 5-minute close (15:25 bar), not NSE's weighted close; the manual chart review (gate 3) must use the same rule or compare on the 1d candle.
 - **Not built (9.18):** the nightly live-versus-backtest comparison of the plan's TE5 "Quality" table. The tape test compares replay with the live worker on fixtures only. **9.19** The identity check stays as a guard; the 20 recorded sessions criterion stays open.
 - **9.1 (outbox)** ported unchanged from the platform template fix (2.2): Redis down stops the sweep and counts nothing; only row faults (ValueError, TypeError, redis ResponseError) count, once per row per sweep; the request-path flush counts no attempt. `tests/test_outbox.py`.
+
+## Review fixes (code review 2026-10-20, numbers 9.20 to 9.26)
+
+- **9.20 memory.** `schemas/candle.Candle` is a slotted, immutable class (interned stock and timeframe, each price an
+  integer coefficient and exponent that give back the exact `Decimal` the feed sent); `CandleMessage` (pydantic)
+  validates the wire shape at the two boundaries (`Candle.from_message`). Measured: about 400 bytes a candle with the
+  buffer's structures (was 1,570), 950,000 candles at 500 stocks = about 390 MB RSS (was 1.5 GB against the worker's
+  1 GB limit). `tests/synthetic/test_memory.py` bounds it, `scripts/benchmark.py memory --stocks 500` measures it. The
+  identity digests (candidates, indicators, study) are byte-equal to main's, and the replay benchmark is as fast.
+- **9.21 tools in the image.** `session_report`, `fill_research_cache` and `backtest_report` live in
+  `tbo_technical_engine.apps` (`python -m tbo_technical_engine.apps.<tool>`, in a container or with `uv run`);
+  `scripts/` keeps thin wrappers and the dev tools (benchmark, identity check, swing review sheet).
+  `backtest_report` reads its files from the settings (`TBO_TECHNICAL_STRATEGIES_FILE` and the rest). `tests/test_image.py`
+  checks the COPY sources against `.dockerignore` and that the runbooks name modules, not script paths.
+- **9.22 session hours.** `services/latency.regular_window` is the calendar's continuous window (a timing change moves
+  it); a special session has none. Boundary rows, the gauges' `evaluation_session_day`, the market context and the
+  session report follow it: a Muhurat session writes no rows (it was 75 rows of the whole universe absent) and is
+  skipped by the clean-sessions streak; a delayed open starts at its own first boundary. The fresh warm-up is 15 minutes
+  before the calendar's open (09:00 usually, 17:45 before an 18:00 special session). **Not changed:** the Beat swing
+  snapshot stays Monday to Friday (whether a Saturday special session gets a snapshot is a decision), and the
+  platform's alert rules still assume 09:15 to 15:30 on a delayed-open day.
+- **9.23 one price scale.** The warm-up reads the raw daily closes of the intraday window, then the adjusted daily
+  history; each session's factor (adjusted over raw close, `services/adjustment.py`) rescales that session's 5- and
+  15-minute candles (prices to their own decimals, volume divided). The warm-up's history copy replaces a buffered
+  candle of the same revision whose prices differ (`CandleBuffer.add(replace=True)`), so a long-running worker's
+  buffer and daily candles move to the new scale; buffered intraday candles older than the window are dropped after a
+  split. The cache fill does the same over its range, and a stock whose cached daily closes disagree with the new
+  adjusted ones is dropped from the cache first (`research_cache_rebased`): refill it with `apps.fill_research_cache`.
+  Test: a 1:2 split in the middle of a cache replays exactly like the unsplit history. If the feed has not applied an
+  action yet (`is_adjustment_pending`) the factors are 1 and the opening-gap guard (9.5) still skips the ex-date.
+- **9.25** every Redis client comes from `utils/redis.connect_redis` (connect 5 s, reply 30 s, health check 30 s;
+  `config/redis.py`); a test refuses a bare `Redis.from_url`.
+- **9.26** the boundary grace is at least `max_candle_age_seconds` (120 s), so a candle evaluated 31 to 120 s late is
+  counted, not `absent`; a missing universe is asked for once a minute, not every 15 s tick; migration 0008 indexes
+  `indicator_snapshot.computed_at` (concurrently). `evaluation_boundary.trade_date` was already indexed (0007).
+- **Not done (Low):** 9.24 (a revised candle's earlier candidate is not withdrawn; needs a contract event), the
+  `tbo_signals` gauge of buffered candles, 9.15's ingest-level retry test, 14.6 (Idempotency-Key as ULID).
 
 ## Open items
 
@@ -136,11 +175,11 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   2026-10-15, no "last updated" date on the page) as a placeholder; every result says `costs.status: placeholder`. Replace the figures
   with the broker actually used and set `status: confirmed`.
 - **TE5 exit criterion is open:** no recorded candles exist yet (the research cache `.dev/research_cache` fills at warm-up once the feed
-  runs). Run `scripts/backtest_report.py --from <date> --to <date>` when 12 months are there; it states the coverage it found.
+  runs). Run `python -m tbo_technical_engine.apps.backtest_report --from <date> --to <date>` when 12 months are there; it states the coverage it found.
 - **TE5 contract change to decide:** serve the evidence summary and the extra result fields (`docs/te5-contract-proposal.md`).
 
 - **Index data (ADR-019): built, not yet seen live.** The feed's index candles reach the context (see the TE4 row and the decision
-  "Index source"). Open: run the feed's 12-month index backfill, fill the research cache (`scripts/fill_research_cache.py --indices
+  "Index source"). Open: run the feed's 12-month index backfill, fill the research cache (`python -m tbo_technical_engine.apps.fill_research_cache --indices
   nifty_50 --isins none`), re-run the TE5 `vwap_pivot` study with `require_index: true` (a `params_overrides` entry), then decide whether
   the live file sets `require_index: true` (a new `params_version`; the owner's call, not made here). Also open: TE6's sector-relative rank
   (the sector indices exist now) and CODE-CHANGES item 1 in tbo_plans.
@@ -221,7 +260,7 @@ Plan: `tbo_plans/tbo_technical_engine/PLAN.md` in the project's shared folder. W
   bandit, pip-audit, pytest with an 80 percent coverage floor (94.7 percent at the time); `.pre-commit-config.yaml` runs
   ruff, ruff format and mypy. Found and fixed: 45 mypy errors in tests (generics, unused ignores, loose dict types), 9
   packages without a docstring, three comprehension nits. pip-audit: pytest 8.4.2 (PYSEC-2026-1845, dev-only) ignored
-  with a reason because the fix needs pytest 9 and pytest-asyncio 1.x. Bandit: B101 skipped (as ruff S101), B104 marked.
+  with a reason because the fix needs pytest 9 and pytest-asyncio 1.x (fixed 2026-10-21: pytest 9.1.1, pytest-asyncio 1.4.0, no ignore). Bandit: B101 skipped (as ruff S101), B104 marked.
 
 ## Stock profile check (stage V1, 2026-10-18)
 
@@ -234,3 +273,25 @@ The daily snapshot carries `return_12m_pct`: the last close against the close 25
 ## Stock master check (stage S3c, 2026-10-20)
 
 Read-only check, no code change. The engine keeps no stock master of its own and reads none: the universe and the gate come from the fundamental engine's API (`GET /v1/universe`, `GET /v1/gate`), candles and feed status from the market feed's API, and nothing reads a name, symbol, sector or index membership. Its tables (`indicator_snapshot`, `technical_snapshot`, `signal_candidate`, `swing_setup`, `backtest_trade` and the rest) are high-volume derived results, which the user_data plan (1a.6) lists as written exceptions to the `market_data` foreign keys. Nothing to switch in S3c or S3d. The index and India VIX producer work (market feed) is where this engine next reads shared market data.
+
+## SonarQube strict fixes (2026-10-23)
+
+From `reviews/2026-10-21-sonarqube-strict/tbo_technical_engine.md` and FIX-BRIEFS 2.10 (pytest 9 was already in PR #28).
+
+- **Bind host from settings:** `TBO_TECHNICAL_BIND_HOST` (default `127.0.0.1`) and `..._BIND_PORT`; the image sets `0.0.0.0`.
+- **Backtest code split, results unchanged:** `simulate` is `_fill`, `_manage` and `_trade` around a `_Position` (stop, targets,
+  exit legs); `run_grid` is `_replay_stock` and `_over_budget`; `build_tape` has `_replay_day`; the report's `render` has
+  `_caveats`, `_section` and `_folds`; the walk-forward choice is `_choose`. `run_grid` and `run_strategy` lost their unused
+  `strategy` argument, and `run_study` takes a `StudyData` (stocks, loader, sessions, range) instead of five arguments. Checked
+  with `scripts/identity_check.py --digests --stocks 4 --sessions 60`: the candidate, indicator and study digests equal `main`'s
+  (950 candidates, 285 trades).
+- **Live code split, same arithmetic:** ADX smoothing (`_smoothed`, `_add_dx`), Supertrend bands (`_carried`, `_direction`), the
+  evaluator's entry window and cooldown (`_open_sides`), ORB's gap check, VWAP pivot's entry test, the swing trend checks
+  (`_known`, `_state`), the fundamental client's paging (`_page`), the outbox flush (`_batch`, `_publish_one`, `_record_row_fault`).
+- **Smaller items:** ISIN patterns use `\d` with `re.ASCII`; scope and signal names are constants; `_session_of` is synchronous;
+  `NoIndexSource` names `IndexSource` as its base; `may_evaluate` (unused, tool scan 9.5.1) removed; one `except ValueError` in
+  paging; tests no longer compare an expression with itself, name the exception they expect, and skip with `assume`.
+- virtualenv 21.14.13 (CVE-2026-113722, dev-only through pre-commit).
+- **Left for SonarQube to accept:** `S7503` on the three consumer handlers in `consumers/handlers.py` (the kit's consumer awaits
+  every handler, and these three do synchronous work). Not in this change: the test-style hits `S9073` and `S5778`, deferred by
+  Bala on 2026-10-21.

@@ -17,12 +17,11 @@ types:
 security:
 	uv run bandit -q -c pyproject.toml -r src
 
-# Known-vulnerability check of the locked dependencies. PYSEC-2026-1845 (pytest <= 9.0.2, shared /tmp/pytest-of-USER
-# directory on multi-user hosts) is ignored on purpose: pytest is a dev-only dependency, never in the image, and the
-# fix (pytest 9) needs pytest-asyncio 1.x, which is a separate change. Drop the ignore when pytest moves to 9.
+# Known-vulnerability check of the locked dependencies, dev tools included. No advisory is ignored: a flagged
+# package is upgraded (owner's rule, 2026-10-21).
 audit:
 	uv export -q --frozen --no-emit-project --no-hashes --no-emit-package tbo-contracts --no-emit-package tbo-platform-kit --no-emit-package tbo-signals -o .audit-requirements.txt
-	uv run pip-audit -r .audit-requirements.txt --no-deps --disable-pip --ignore-vuln PYSEC-2026-1845 \
+	uv run pip-audit -r .audit-requirements.txt --no-deps --disable-pip \
 		|| (rm -f .audit-requirements.txt; exit 1)
 	rm -f .audit-requirements.txt
 

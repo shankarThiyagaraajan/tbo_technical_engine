@@ -130,7 +130,7 @@ def ema_pullback(bars: Bars, atr: float, trend: Trend, emas: dict[int, float], p
         return None
     recent_high = float(bars.high[n - 1 - q.pullback_bars : n - 1].max())
     depth = (recent_high - close) / recent_high * 100.0
-    if depth < q.min_pullback_pct or not close > float(bars.open[-1]):
+    if depth < q.min_pullback_pct or close <= float(bars.open[-1]):
         return None
     period, level = touched
     return finish(
@@ -181,13 +181,12 @@ def week_52_high_breakout(bars: Bars, atr: float, p: SetupParams) -> Draft | Non
 def detect(bars: Bars, atr: float, trend: Trend, emas: dict[int, float], p: SetupParams) -> Draft | None:
     """The first detector in `precedence` that fires."""
     for kind in p.precedence:
-        draft = (
-            week_52_high_breakout(bars, atr, p)
-            if kind == "week_52_high_breakout"
-            else base_breakout(bars, atr, trend, p)
-            if kind == "base_breakout"
-            else ema_pullback(bars, atr, trend, emas, p)
-        )
+        if kind == "week_52_high_breakout":
+            draft = week_52_high_breakout(bars, atr, p)
+        elif kind == "base_breakout":
+            draft = base_breakout(bars, atr, trend, p)
+        else:
+            draft = ema_pullback(bars, atr, trend, emas, p)
         if draft is not None:
             return draft
     return None
