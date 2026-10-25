@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from tbo_technical_engine.backtest.index_side import PRIMARY_INDEX, index_sides
-from tbo_technical_engine.backtest.study import run_study
+from tbo_technical_engine.backtest.study import StudyData, run_study
 from tbo_technical_engine.backtest.summary import render
 from tbo_technical_engine.schemas.backtest import ParamOverride
 from tests.backtest.builders import COSTS, SETTINGS
@@ -57,9 +57,18 @@ def pivot(tmp_path: Path, *, require: bool, with_index: bool):  # type: ignore[n
         side = index_sides(cache.indices.candles(PRIMARY_INDEX, "5m"))
     overrides = [ParamOverride(name="require_index", value="true" if require else "false")]
     return run_study(
-        CONFIG, "vwap_pivot", overrides, None, [ISIN_A], cache.stock, {ISIN_A: cache.session_dates(ISIN_A, "5m")},
-        FIRST, LAST, SETTINGS, COSTS, None, monotonic=lambda: 0.0, deadline=float("inf"), index_side=side,
-    )  # fmt: skip
+        CONFIG,
+        "vwap_pivot",
+        overrides,
+        None,
+        StudyData([ISIN_A], cache.stock, {ISIN_A: cache.session_dates(ISIN_A, "5m")}, FIRST, LAST),
+        SETTINGS,
+        COSTS,
+        None,
+        monotonic=lambda: 0.0,
+        deadline=float("inf"),
+        index_side=side,
+    )
 
 
 def test_require_index_without_index_candles_takes_no_trade_and_the_report_says_so(tmp_path: Path) -> None:

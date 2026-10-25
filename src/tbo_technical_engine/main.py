@@ -10,8 +10,7 @@ from tbo_technical_engine.config.settings import Settings
 
 
 def main() -> None:
-    """Serve the API. Binds all interfaces because the container's port is reachable only on the stack's internal
-    network."""
+    """Serve the API on the configured host and port (loopback unless set; the image sets all interfaces)."""
     settings = Settings()
     configure_logging(
         service=settings.short_name,
@@ -21,9 +20,8 @@ def main() -> None:
     )
     uvicorn.run(
         build_app(settings),
-        # Inside its container, on the stack's internal network only.
-        host="0.0.0.0",  # noqa: S104  # nosec B104
-        port=8000,
+        host=settings.bind_host,
+        port=settings.bind_port,
         log_config=None,
         proxy_headers=False,
         server_header=False,

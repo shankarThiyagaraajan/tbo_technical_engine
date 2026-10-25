@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
+from datetime import date
 
 from tbo_technical_engine.indicators.bars import Bars
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
@@ -94,7 +94,6 @@ def test_the_fifteen_minute_and_daily_suites_work_too() -> None:
     for tf in ("15m", "1d"):
         found = engine.values(ISIN_A, tf)
         assert found is not None and same(found[1], replay(buffer, tf))
-    assert timedelta(0) == timedelta(0)
 
 
 def test_a_read_after_several_candles_catches_up_and_equals_a_rebuild() -> None:

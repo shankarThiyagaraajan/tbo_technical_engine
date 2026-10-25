@@ -10,7 +10,7 @@ published, with `data_quality` degraded, because the decision engine stops issui
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -26,6 +26,7 @@ from tbo_technical_engine.context.index_source import IndexSnapshot, IndexSource
 from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.schemas.context import MarketContext
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
+from tbo_technical_engine.services.latency import regular_window
 from tbo_technical_engine.services.readiness import Readiness
 from tbo_technical_engine.services.universe import UniverseHolder
 from tbo_technical_engine.store import context as store
@@ -34,8 +35,6 @@ from tbo_technical_engine.utils.timefmt import z
 log = get_logger(__name__)
 CONTEXT_EVENT = "tbo.technical.market.context.v1"
 CONTEXT_SCHEMA = "https://tbo.internal/schemas/technical/market_context.v1.json"
-FIRST = time(9, 15)
-LAST = time(15, 30)
 GRACE = timedelta(seconds=15)
 """How long after a boundary the context is built, so the candle that closed at the boundary has arrived."""
 PRIMARY_INDEX = "nifty_50"
@@ -78,6 +77,8 @@ class ContextService:
         self.wide_pct = wide_pct
         self.latest: tuple[datetime, MarketContext] | None = None
         self._done: datetime | None = None
+        self._unavailable: datetime | None = None
+        """The boundary at which "calendar unavailable" was last logged: once per boundary, not every tick."""
         self._day_class: tuple[date, Literal["narrow", "normal", "wide"] | None] | None = None
 
     async def build(self, at: datetime) -> MarketContext:
@@ -116,13 +117,17 @@ class ContextService:
         """Publish the context of the current boundary if it is due and not yet done. True when one was published."""
         now = self.clock()
         at = boundary_of(now)
-        if self._done == at or now - at < GRACE or not (FIRST <= at.time() <= LAST):
+        if self._done == at or now - at < GRACE:
             return False
         try:
-            if not self.calendar.is_trading_day(at.date()):
-                return False
-        except Exception as exc:  # the kit's holiday file is empty until the owner fills it
-            log.warning("calendar_unavailable", error=type(exc).__name__)
+            window = regular_window(self.calendar, at.date())
+        except Exception as exc:  # no calendar yet (the filings extractor has not answered)
+            if self._unavailable != at:
+                log.warning("calendar_unavailable", error=type(exc).__name__)
+                self._unavailable = at
+            return False
+        # The calendar's session (a delayed open moves it; a special session has none, review 9.22).
+        if window is None or not (window[0] <= at <= window[1]):
             return False
         context = await self.build(at)
         async with self.sessions() as session, session.begin():

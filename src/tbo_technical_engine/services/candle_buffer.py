@@ -9,7 +9,7 @@ process that never stopped.
 
 from __future__ import annotations
 
-from bisect import bisect_right, insort
+from bisect import bisect_left, bisect_right, insort
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from datetime import datetime
@@ -19,7 +19,10 @@ from tbo_technical_engine.schemas.candle import Candle
 from tbo_technical_engine.utils.timeframes import length
 
 CAPACITY = {"1m": 1000, "5m": 1000, "15m": 500, "60m": 300, "1d": 400, "1w": 120}
-"""Most candles kept per series: about 13 sessions of 5-minute candles, 20 of 15-minute ones, 400 daily candles."""
+"""Most candles kept per series: about 13 sessions of 5-minute candles, 20 of 15-minute ones, 400 daily candles.
+At 500 stocks that is 950,000 candles, about 390 MB with the compact `Candle` (review 9.20; it was 1.5 GB as pydantic
+models, over the signal worker's 1 GB limit). `tests/synthetic/test_memory.py` bounds it; `scripts/benchmark.py memory`
+measures it."""
 
 
 class SeriesView(Sequence[Candle]):
@@ -68,12 +71,18 @@ class CandleBuffer:
         self._series: dict[tuple[str, str], dict[datetime, Candle]] = defaultdict(dict)
         self._starts: dict[tuple[str, str], list[datetime]] = defaultdict(list)
 
-    def add(self, candle: Candle) -> bool:
-        """Store `candle`; False when an equal or newer revision of it is already here."""
+    def add(self, candle: Candle, *, replace: bool = False) -> bool:
+        """Store `candle`; False when an equal or newer revision of it is already here.
+
+        `replace` (the warm-up's history read) also lets a copy of the same revision with other prices win: the
+        feed's adjusted daily candle over the raw one the stream sent, and intraday candles rescaled after a split
+        (review 9.23). A newer revision is never replaced by an older one either way."""
         key = (candle.isin, candle.timeframe)
         series = self._series[key]
         held = series.get(candle.start_at)
-        if held is not None and held.revision >= candle.revision:
+        if held is not None and (
+            held.revision > candle.revision or (held.revision == candle.revision and (not replace or held == candle))
+        ):
             return False
         if held is None:
             starts = self._starts[key]
@@ -90,9 +99,9 @@ class CandleBuffer:
             del starts[:extra]
         return True
 
-    def add_many(self, candles: Iterable[Candle]) -> int:
-        """Add several candles; returns how many were new or newer revisions."""
-        return sum(self.add(c) for c in candles)
+    def add_many(self, candles: Iterable[Candle], *, replace: bool = False) -> int:
+        """Add several candles; returns how many were new or newer revisions (or, with `replace`, changed)."""
+        return sum(self.add(c, replace=replace) for c in candles)
 
     def series(self, isin: str, timeframe: str) -> list[Candle]:
         """The candles, oldest first."""
@@ -129,6 +138,20 @@ class CandleBuffer:
         """The newest candle of the series, or None when it is empty."""
         starts = self._starts.get((isin, timeframe))
         return self._series[(isin, timeframe)][starts[-1]] if starts else None
+
+    def forget_before(self, isin: str, timeframe: str, cutoff: datetime) -> int:
+        """Drop the series' candles that start before `cutoff`; returns how many. The warm-up uses it after a split:
+        what it did not read again is on the old price scale (review 9.23)."""
+        key = (isin, timeframe)
+        starts = self._starts.get(key)
+        if not starts:
+            return 0
+        n = bisect_left(starts, cutoff)
+        series = self._series[key]
+        for start in starts[:n]:
+            del series[start]
+        del starts[:n]
+        return n
 
     def forget(self, isins: Iterable[str]) -> None:
         """Drop stocks that left the universe."""

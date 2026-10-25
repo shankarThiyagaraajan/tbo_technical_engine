@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from datetime import date
 
 from tbo_technical_engine.backtest.study import Study
-from tbo_technical_engine.schemas.backtest import BacktestSettings, Metrics
+from tbo_technical_engine.schemas.backtest import BacktestSettings, Metrics, WalkForward
 from tbo_technical_engine.schemas.costs import CostSchedule
 
 
@@ -67,6 +67,24 @@ def render(
         "## Read this first",
         "",
     ]
+    lines += _caveats(studies, settings, costs)
+    lines += ["## Summary", "", HEAD]
+    for name, s in studies.items():
+        low = " (low sample)" if s.metrics.trade_count < settings.evidence.min_trades else ""
+        lines.append(_row(f"{name} - whole period{low}", s.metrics))
+        oos = s.walk_forward.out_of_sample
+        low = " (low sample)" if oos.trade_count < settings.evidence.min_trades else ""
+        lines.append(_row(f"{name} - **out of sample**{low}", oos))
+    lines.append("")
+    for name, s in studies.items():
+        lines += _section(name, s, settings)
+    return "\n".join(lines) + "\n"
+
+
+def _caveats(studies: Mapping[str, Study], settings: BacktestSettings, costs: CostSchedule) -> list[str]:
+    """The "Read this first" bullets: placeholder costs, what out of sample means, low samples, the index filter and
+    each strategy's coverage."""
+    lines = []
     if costs.status != "confirmed":
         lines.append(
             f"- **Costs are a placeholder** (`{costs.schedule_version}`; {costs.source}). "
@@ -80,61 +98,67 @@ def render(
     lines += _index_line(studies)
     for name, s in studies.items():
         c = s.coverage
-        lines.append(
-            f"- `{name}`: {c.isins_with_data} of {c.requested_isins} stocks had candles; {c.note}."
-            + (f" Grid skipped: {s.grid_skipped}." if s.grid_skipped else "")
+        skipped = f" Grid skipped: {s.grid_skipped}." if s.grid_skipped else ""
+        lines.append(f"- `{name}`: {c.isins_with_data} of {c.requested_isins} stocks had candles; {c.note}.{skipped}")
+    lines.append("")
+    return lines
+
+
+def _section(name: str, s: Study, settings: BacktestSettings) -> list[str]:
+    """One strategy's section: folds, stability, return statistics, the three result rows and each fold."""
+    wf = s.walk_forward
+    if wf.stability_pct is not None:
+        stability = (
+            f"Parameter stability: {wf.stability_pct}% of folds had neighbours within "
+            f"{settings.walk_forward.stability_band} of the chosen set."
         )
-    lines.append("")
-    lines += ["## Summary", "", HEAD]
-    for name, s in studies.items():
-        low = " (low sample)" if s.metrics.trade_count < settings.evidence.min_trades else ""
-        lines.append(_row(f"{name} - whole period{low}", s.metrics))
-        oos = s.walk_forward.out_of_sample
-        low = " (low sample)" if oos.trade_count < settings.evidence.min_trades else ""
-        lines.append(_row(f"{name} - **out of sample**{low}", oos))
-    lines.append("")
-    for name, s in studies.items():
-        wf = s.walk_forward
-        lines += [f"## {name}", ""]
+    else:
+        stability = "No parameter grid was walked."
+    stats = s.statistics
+    lines = [f"## {name}", ""]
+    lines.append(
+        f"Folds: {len(wf.folds)} (train {settings.walk_forward.train_days} sessions, "
+        f"test {settings.walk_forward.test_days}). " + stability
+    )
+    lines.append(
+        f"Return statistics on the reference capital: total {stats['total_return_pct']}%, "
+        f"Sharpe {stats['sharpe']}, max drawdown {stats['max_drawdown_pct']}%."
+    )
+    lines += ["", HEAD, _row("whole period", s.metrics), _row("in sample (train windows)", wf.in_sample)]
+    lines += [_row("**out of sample (test windows)**", wf.out_of_sample), ""]
+    lines += _folds(wf) if wf.folds else _NO_FOLD
+    if wf.parameter_choices:
         lines.append(
-            f"Folds: {len(wf.folds)} (train {settings.walk_forward.train_days} sessions, "
-            f"test {settings.walk_forward.test_days}). "
-            + (
-                f"Parameter stability: {wf.stability_pct}% of folds had neighbours within "
-                f"{settings.walk_forward.stability_band} of the chosen set."
-                if wf.stability_pct is not None
-                else "No parameter grid was walked."
+            "Chosen values across folds: "
+            + "; ".join(
+                f"{p}: " + ", ".join(f"{v} x{n}" for v, n in sorted(c.items())) for p, c in wf.parameter_choices.items()
             )
         )
-        stats = s.statistics
+        lines.append("")
+    return lines
+
+
+_NO_FOLD = ["No walk-forward fold: the data covers fewer sessions than one train plus one test window.", ""]
+
+
+def _stable(value: bool | None) -> str:
+    """A fold's stability as the table shows it."""
+    if value is None:
+        return "-"
+    return "yes" if value else "no"
+
+
+def _folds(wf: WalkForward) -> list[str]:
+    """The table of walk-forward folds."""
+    lines = [
+        "| test window | chosen | train expectancy R | test trades | test expectancy R | stable |",
+        "|---|---|---|---|---|---|",
+    ]
+    for f in wf.folds:
+        chosen = ", ".join(f"{k}={v}" for k, v in f.chosen.items()) or "fixed"
         lines.append(
-            f"Return statistics on the reference capital: total {stats['total_return_pct']}%, "
-            f"Sharpe {stats['sharpe']}, max drawdown {stats['max_drawdown_pct']}%."
+            f"| {f.test_from} to {f.test_to} | {chosen} | {f.train.expectancy_r} | {f.test.trade_count} "
+            f"| {f.test.expectancy_r} | {_stable(f.stable)} |"
         )
-        lines += ["", HEAD, _row("whole period", s.metrics), _row("in sample (train windows)", wf.in_sample)]
-        lines += [_row("**out of sample (test windows)**", wf.out_of_sample), ""]
-        if wf.folds:
-            lines += [
-                "| test window | chosen | train expectancy R | test trades | test expectancy R | stable |",
-                "|---|---|---|---|---|---|",
-            ]
-            for f in wf.folds:
-                chosen = ", ".join(f"{k}={v}" for k, v in f.chosen.items()) or "fixed"
-                stable = "-" if f.stable is None else ("yes" if f.stable else "no")
-                lines.append(
-                    f"| {f.test_from} to {f.test_to} | {chosen} | {f.train.expectancy_r} | {f.test.trade_count} "
-                    f"| {f.test.expectancy_r} | {stable} |"
-                )
-            lines.append("")
-        else:
-            lines += ["No walk-forward fold: the data covers fewer sessions than one train plus one test window.", ""]
-        if wf.parameter_choices:
-            lines.append(
-                "Chosen values across folds: "
-                + "; ".join(
-                    f"{p}: " + ", ".join(f"{v} x{n}" for v, n in sorted(c.items()))
-                    for p, c in wf.parameter_choices.items()
-                )
-            )
-            lines.append("")
-    return "\n".join(lines) + "\n"
+    lines.append("")
+    return lines

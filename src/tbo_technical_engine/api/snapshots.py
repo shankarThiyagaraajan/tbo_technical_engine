@@ -20,7 +20,8 @@ from tbo_technical_engine.store import snapshots as snapshot_store
 from tbo_technical_engine.store import swing_setups as setup_store
 from tbo_technical_engine.utils import paging
 
-ISIN = re.compile(r"^IN[A-Z0-9]{9}[0-9]$")
+ISIN = re.compile(r"^IN[A-Z\d]{9}\d$", re.ASCII)  # ASCII: a digit of another script is no ISIN digit
+READ = "technical:read"
 
 router = APIRouter()
 
@@ -50,7 +51,7 @@ async def list_snapshots(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     cursor: Annotated[str | None, Query(min_length=1, max_length=512)] = None,
     date: Annotated[date_type | None, Query()] = None,
-    caller: Claims = requires("technical:read"),
+    caller: Claims = requires(READ),
 ) -> dict[str, Any]:
     """List the snapshots served for a trade date."""
     after = _after(cursor)
@@ -67,7 +68,7 @@ async def get_snapshot(
     request: Request,
     isin: str,
     date: Annotated[date_type | None, Query()] = None,
-    caller: Claims = requires("technical:read"),
+    caller: Claims = requires(READ),
 ) -> dict[str, Any]:
     """Return one stock's snapshot for a trade date."""
     if not ISIN.fullmatch(isin):
@@ -86,7 +87,7 @@ async def list_swing_setups(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     cursor: Annotated[str | None, Query(min_length=1, max_length=512)] = None,
     date: Annotated[date_type | None, Query()] = None,
-    caller: Claims = requires("technical:read"),
+    caller: Claims = requires(READ),
 ) -> dict[str, Any]:
     """Setups found after the session `date` (default: the latest session that has any), ordered by ISIN."""
     after = _after(cursor)

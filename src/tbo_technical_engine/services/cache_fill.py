@@ -13,6 +13,7 @@ from tbo_platform_kit.http_client import UpstreamUnavailable
 from tbo_platform_kit.logging import get_logger
 
 from tbo_technical_engine.clients.market_feed import MarketFeedClient
+from tbo_technical_engine.services.adjustment import adjust, rebase_cache, session_factors
 from tbo_technical_engine.services.warmup import ADJUSTED_TIMEFRAMES
 from tbo_technical_engine.store.research_cache import ResearchCache
 
@@ -43,21 +44,27 @@ async def fill_cache(
     concurrency: int = 4,
 ) -> FillResult:
     """Page the feed's `/v1/candles` for `start`..`end` (inclusive) and merge it into the cache. Idempotent: the cache
-    merges by candle start, latest revision wins. Daily candles are read split-adjusted, as the live warm-up does."""
+    merges by candle start, latest revision wins. Daily candles are read split-adjusted, as the live warm-up does, and
+    intraday candles are rescaled to the same basis (review 9.23); a stock whose basis changed since its rows were
+    written is dropped first, so the cache never holds two price scales for it."""
     gate = asyncio.Semaphore(concurrency)
     result = FillResult()
+    since, until = _midnight(start), _midnight(end + timedelta(days=1))
+    intraday = [tf for tf in timeframes if tf not in ADJUSTED_TIMEFRAMES]
 
     async def one(isin: str) -> None:
         async with gate:
             try:
+                # The raw daily closes first, then the adjusted ones: their ratio is each session's factor.
+                raw_daily = [c async for c in feed.candles(isin, "1d", since, until)] if intraday else []
+                adjusted_daily = [c async for c in feed.candles(isin, "1d", since, until, adjusted=True)]
+                factors = session_factors(raw_daily, adjusted_daily)
+                rebase_cache(cache, isin, adjusted_daily)
                 for tf in timeframes:
-                    fetched = [
-                        c
-                        async for c in feed.candles(
-                            isin, tf, _midnight(start), _midnight(end + timedelta(days=1)),
-                            adjusted=tf in ADJUSTED_TIMEFRAMES,
-                        )
-                    ]  # fmt: skip
+                    if tf in ADJUSTED_TIMEFRAMES:
+                        fetched = adjusted_daily
+                    else:
+                        fetched = adjust([c async for c in feed.candles(isin, tf, since, until)], factors)
                     cache.write(isin, tf, fetched)
                     result.candles += len(fetched)
             except UpstreamUnavailable as exc:
