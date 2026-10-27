@@ -9,6 +9,10 @@ same change as the code.
 
 `docs/PROGRESS.md` is this repository's current state: version, what is done, what is in progress, open PRs and branches, what waits on the owner, and links to the deeper docs. **Read it before any work.** Update it in the same PR as every change, a docs-only one too (and this repository's row in `tbo_plans/PROGRESS.md`), so it never goes stale. Keep it under about 15 KB, newest first; move older detail to `docs/progress/archive/` and link it.
 
+## Task files
+
+Before work, read `../tbo_platform/RULES.md` (`services/tbo_platform/RULES.md` on Bala's laptop; [on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/RULES.md)), this repository's `TASKS.md` and the common `../tbo_platform/TASKS.md` ([on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/TASKS.md)). Keep `docs/PROGRESS.md` current; set the task's status and result when you stop.
+
 ## Layout
 
 `src/tbo_technical_engine/`: `api/` routes (`stub.py` = 501 answers, removed as phases land) · `schemas/` pydantic (requests,
