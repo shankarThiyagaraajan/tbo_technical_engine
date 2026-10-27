@@ -14,6 +14,7 @@ The full history (every phase, decision and review fix, with its reasoning) is i
 | Open PRs | #36 Dependabot compose group (2 updates), not ours; no branch of ours is open |
 | Waiting on Bala | trading costs, recorded candles for the backtest, the `require_index` decision (see open items) |
 | Redesign pause | Bala is redesigning the old design (2026-10-23). Nothing new is started here; this file only records where things stand |
+| Task file | `TASKS.md` at the repository root (format and rules in tbo_platform `TASKS.md` and `RULES.md`); tasks from Bala's laptop Claude are recorded there (2026-10-27) |
 
 ## What is built (all merged to main)
 
