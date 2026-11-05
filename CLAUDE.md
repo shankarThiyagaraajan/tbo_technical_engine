@@ -1,5 +1,7 @@
 # tbo_technical_engine
 
+**Main session only, not subagents:** read `/home/shankar/LAB/Rust/TradeBOT/Docs/tbo_docs/docs/THREAD-RULES.md` once, for how to run this session. Where it differs, this file and `RULES.md` win, except that they can't lower its safety floor.
+
 Turns market-feed candles into trade candidates, market context and technical snapshots. Part of TBO; plans in the project's shared folder `tbo_plans/` (start with `INDEX.md`).
 
 **Read `docs/PROGRESS.md` first**, and keep it and this repository's row in `tbo_plans/PROGRESS.md` current in the

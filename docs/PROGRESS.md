@@ -30,6 +30,7 @@ The full history (every phase, decision and review fix, with its reasoning) is i
 
 ## Recent changes (newest first)
 
+1. **2026-11-05** `CLAUDE.md` points the main session at the shared thread rules (owner). Docs only, no release.
 1. **2026-11-04** Check levels (owner): docs, small and medium changes run scoped checks and no SonarQube; full `make check` and SonarQube for level C only (`../tbo_platform/RULES.md`, `CLAUDE.md`).
 1. **2026-10-25** PR #35: filelock 4.2.4, a lock-only fix for six advisories in 4.2.0.
 2. **2026-10-23** SonarQube strict fixes (PR #33, #34 release request, macro): bind host as a setting, backtest and live functions split with identical digests (`scripts/identity_check.py --digests`: 950 candidates, 285 trades), virtualenv 21.14.13, unused code removed. SonarQube passed. `S7503` on three consumer handlers is left for SonarQube to accept; S9073 and S5778 deferred by Bala on 2026-10-21.
