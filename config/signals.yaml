@@ -1,5 +1,6 @@
 # What this service says about itself, by id (tbo_signals). Add, remove or change a signal here and nowhere else.
-# The stage names are the stages the dashboard board draws for this service (tbo_dashboard topology.ts).
+# The stage names label this service's pipeline. The dashboards' Signals screen reads them as an optional field
+# (tbo_dashboard_ui_react, src/screens/signals/domain/signals.ts) and does not draw them today.
 # Levels: TBO_TECHNICAL_SIGNALS=off|metrics|full. Events (kind event) are written only at full.
 # Not alerted yet: the workers sleep outside the session, so "stale" needs a session-hours rule (platform).
 service: technical
