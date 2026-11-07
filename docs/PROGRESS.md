@@ -5,6 +5,8 @@ The full history (every phase, decision and review fix, with its reasoning) is i
 [progress/archive/PROGRESS-2026-10-27.md](progress/archive/PROGRESS-2026-10-27.md). Other docs: [runbooks.md](runbooks.md),
 [monitoring.md](monitoring.md), [adr/](adr/), [te5-contract-proposal.md](te5-contract-proposal.md).
 
+2026-11-07: CLAUDE.md's check-levels line follows the big-change rule (level C only, SonarQube scoped); docs only, no release.
+
 ## Now
 
 | | |
