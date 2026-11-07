@@ -25,7 +25,7 @@ internal records) · `config/` (`settings.py`: `Settings`, `REPOSITORY`, `SHORT_
 
 ## Check before pushing
 
-**Which checks a change runs (owner, 2026-11-04; the full rule is `../tbo_platform/RULES.md`, "Check levels"; read that file before work):** docs only: none. Small to medium outside the risk paths (level B): lint, format, types, security and only the tests it touches, no SonarQube. Major or on a risk path (level C): the full `make check` below and SonarQube green. Say the level in the PR body.
+**Which checks a change runs (the full rule is `../tbo_platform/RULES.md`, "Check levels"; read that file before work):** docs only: none. Small or medium, on any path (level B): lint, format, types, security and only the tests it touches, no SonarQube. Big (level C: a breaking change, or a large change on a risk path): the full `make check` below and SonarQube's scoped scan green. Say the level in the PR body: it alone picks the scan.
 
 ```sh
 make check
