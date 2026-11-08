@@ -13,7 +13,8 @@ same change as the code.
 
 ## Task files
 
-Before work, read `../tbo_platform/RULES.md` (`services/tbo_platform/RULES.md` on Bala's laptop; [on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/RULES.md)), this repository's `TASKS.md` and the common `../tbo_platform/TASKS.md` ([on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/TASKS.md)). Keep `docs/PROGRESS.md` current; set the task's status and result when you stop.
+Before work, read `../tbo_platform/RULES.md` ([on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/RULES.md)): the rules and the procedure for every TBO repository, including which model does which task.
+Models (owner, 2026-11-08): Sonnet develops (building, tests, docs, progress and task files, mechanical edits); Opus reviews (code, plan and PR reviews, by a reader who did not build it) and fixes bugs, review findings included; Fable only when the owner decides, never on an agent's own judgement; risk-path code stays on Opus (the 2026-11-07 safety floor, kept until the owner says otherwise). Name the model in every dispatch.
 
 ## Layout
 
