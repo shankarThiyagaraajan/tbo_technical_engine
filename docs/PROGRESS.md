@@ -32,6 +32,7 @@ The full history (every phase, decision and review fix, with its reasoning) is i
 
 ## Recent changes (newest first)
 
+1. **2026-11-08** Dashboard move, stage 11 (`docs/dashboard-move-touch-points`, level B, no release): the comment in `config/signals.yaml` no longer points at a `topology.ts` that doesn't exist; it names the field the React dashboards read. No behaviour changes. The dashboard's back end now runs from `backend/` in `tbo_dashboard_ui_react`. Plan: `tbo_platform` `docs/plans/move-dashboard-backend.md`.
 1. **2026-11-05** `CLAUDE.md` points the main session at the shared thread rules (owner). Docs only, no release.
 1. **2026-11-04** Check levels (owner): docs, small and medium changes run scoped checks and no SonarQube; full `make check` and SonarQube for level C only (`../tbo_platform/RULES.md`, `CLAUDE.md`).
 1. **2026-10-25** PR #35: filelock 4.2.4, a lock-only fix for six advisories in 4.2.0.
