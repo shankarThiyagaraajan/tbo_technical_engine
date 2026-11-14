@@ -60,8 +60,14 @@ Meant to happen (drill: `test_redis_restart_…`): with persistence (the platfor
 consumers log `consumer_error` for the length of the outage, then carry on from where their groups stopped, and nothing
 is evaluated twice. Without its data (a lost volume or a flush) the groups are gone: the consumers recreate them
 (`consumer_group_lost` in the log) and ask for a fresh warm-up, because candles published while the group was missing never
-arrive. Candles of the recovery window are missed (visible in the record). The kit's own consumer retried a missing group
-for ever; `consumers/handlers.py` fixes that for this worker.
+arrive. Candles of the recovery window are missed (visible in the record). Kit 1.0's consumer retried a missing group
+for ever; kit 2.5 recreates it itself but tells nobody, so `consumers/handlers.py` still calls the warm-up callback.
+
+An entry whose handler fails on the infrastructure (any `OSError`, a peer or the token issuer refusing) stays pending and is
+retried every minute for as long as that lasts, however old it is (`consumers/retry.py`, kit 1.0's rule kept on kit 2.5); a
+bug or a bad event dead-letters after 5 tries. A `PermissionError` or a certificate error is retried for ever too: fix the
+cause, the entries then go through. Watch `event_handler_failed` warnings with a rising `attempt`; the kit has no alert
+on the oldest pending entry yet (`XPENDING` of the group).
 
 ## Worker crash
 
