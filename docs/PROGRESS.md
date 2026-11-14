@@ -13,7 +13,7 @@ The full history (every phase, decision and review fix, with its reasoning) is i
 |---|---|
 | Version | v0.2.2 (latest release tag); kit-2.5 release requested (v0.3.0 expected) |
 | Main | `1b51722` (2026-10-25) |
-| Open PRs | #36 Dependabot compose group (2 updates), not ours; no branch of ours is open |
+| Open PRs | #45 kit 2.5 (row D2-5k2, `claude/loving-edison-oz39w9-d2-5k2`); #36 Dependabot compose group (2 updates), not ours |
 | Waiting on Bala | trading costs, recorded candles for the backtest, the `require_index` decision (see open items) |
 | Redesign pause | Bala is redesigning the old design (2026-10-23). Nothing new is started here; this file only records where things stand |
 | Task file | `TASKS.md` at the repository root (format and rules in tbo_platform `TASKS.md` and `RULES.md`); tasks from Bala's laptop Claude are recorded there (2026-10-27) |
@@ -32,7 +32,7 @@ The full history (every phase, decision and review fix, with its reasoning) is i
 
 ## Recent changes (newest first)
 
-0. **2026-11-14** Kit 2.5 on today's code (remove-lab-mode row D2-5k2, plan P17/P24; level C, release `sub`, request `releases/requests/kit-2.5.md`): kit pin `~=2.5` at tbo_platform `8df4ffc` (kit 2.5.0). Consumers keep kit 1.0's retry rule (`consumers/retry.py`); `RecreatingConsumer` still reports a lost group; `Readiness` ignores an older `feed.status` (new order guard; universe, index and candle handlers already guarded by version or revision, the calendar handler holds no state); `unguarded_routes(app) == []` is pinned. No mode change. Next: D2-5 (kit 3) waits on A2, A3 and this release.
+1. **2026-11-14** Kit 2.5 on today's code (remove-lab-mode row D2-5k2, plan P17/P24; level C, release `sub`, request `releases/requests/kit-2.5.md`): kit pin `~=2.5` at tbo_platform `8df4ffc` (kit 2.5.0). Consumers keep kit 1.0's retry rule (`consumers/retry.py`); `RecreatingConsumer` still reports a lost group; `Readiness` ignores an older `feed.status` (new order guard; universe, index and candle handlers already guarded by version or revision, the calendar handler holds no state); `unguarded_routes(app) == []` is pinned. No mode change. Next: D2-5 (kit 3) waits on A2, A3 and this release.
 1. **2026-11-08** Dashboard move, stage 11 (`docs/dashboard-move-touch-points`, level B, no release): the comment in `config/signals.yaml` no longer points at a `topology.ts` that doesn't exist; it names the field the React dashboards read. No behaviour changes. The dashboard's back end now runs from `backend/` in `tbo_dashboard_ui_react`. Plan: `tbo_platform` `docs/plans/move-dashboard-backend.md`.
 1. **2026-11-05** `CLAUDE.md` points the main session at the shared thread rules (owner). Docs only, no release.
 1. **2026-11-04** Check levels (owner): docs, small and medium changes run scoped checks and no SonarQube; full `make check` and SonarQube for level C only (`../tbo_platform/RULES.md`, `CLAUDE.md`).
