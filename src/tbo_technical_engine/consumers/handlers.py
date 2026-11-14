@@ -6,7 +6,6 @@ from collections.abc import Callable
 from typing import Any
 
 from redis.asyncio import Redis
-from redis.exceptions import ResponseError
 from sqlalchemy.ext.asyncio import AsyncSession
 from tbo_platform_kit.events import EventConsumer, Outcome
 from tbo_platform_kit.logging import get_logger
@@ -14,6 +13,7 @@ from tbo_platform_kit.metrics import Metrics
 from tbo_platform_kit.mode import ModeProfile
 from tbo_signals import Signals
 
+from tbo_technical_engine.consumers.retry import is_outage
 from tbo_technical_engine.schemas.candle import FeedStatus, IndexCandle, UniverseSnapshot
 from tbo_technical_engine.services.candle_buffer import CandleBuffer
 from tbo_technical_engine.services.index_feed import FeedIndexSource
@@ -32,27 +32,26 @@ WORKER_SIGNAL = "technical.worker"  # the signal worker's activity, one `worker`
 
 
 class RecreatingConsumer(EventConsumer):
-    """The kit's consumer, plus: when Redis comes back without its data (a lost volume, a flush) the group is gone and
-    every read fails with NOGROUP. The kit caches that the group exists and would retry for ever; this one creates it
-    again and tells `on_group_lost` (TE8 drill: Redis restart without persistence)."""
+    """The kit's consumer with this service's retry rule (`consumers/retry.py`: an outage is held for as long as it
+    lasts, as on kit 1.0), plus a callback when Redis lost the group. When Redis comes back without its data (a lost
+    volume, a flush) every read fails with NOGROUP. Kit 2.5 forgets the group and creates it again on the next cycle
+    but tells nobody; this class tells `on_group_lost` (TE8 drill: Redis restart without persistence), which asks
+    for the warm-up or history that the events published meanwhile would have carried. Every consumer here is built
+    through this class, so none can miss the retry rule (`tests/consumers/test_retry_and_order.py`).
+    """
 
     def __init__(self, *args: Any, on_group_lost: Callable[[], None] | None = None, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, transient=is_outage, transient_max_age=None, **kwargs)
         self.on_group_lost = on_group_lost
 
     async def run_once(self, block_ms: int | None = None) -> list[Outcome]:
-        """One cycle of the kit's consumer; a missing group is recreated and the cycle ends empty."""
-        try:
-            return await super().run_once(block_ms)
-        except ResponseError as exc:
-            if "NOGROUP" not in str(exc):
-                raise
-            log.warning("consumer_group_lost", stream=self.stream, group=self.group)
-            self._group_ready = False
-            await self.ensure_group()
-            if self.on_group_lost is not None:
-                self.on_group_lost()
-            return []
+        """One cycle of the kit's consumer; if the kit found the group gone (it clears `_group_ready`), tell the
+        callback."""
+        had_group = self._group_ready
+        outcomes = await super().run_once(block_ms)
+        if had_group and not self._group_ready and self.on_group_lost is not None:
+            self.on_group_lost()
+        return outcomes
 
 
 def candle_consumer(

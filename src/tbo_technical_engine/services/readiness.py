@@ -11,6 +11,8 @@ the buffer from REST history, where the feed's own gap refill has already repair
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from tbo_platform_kit.logging import get_logger
 
 from tbo_technical_engine.schemas.candle import FeedStatus
@@ -24,6 +26,8 @@ class Readiness:
 
     def __init__(self) -> None:
         self.feed_state = "connecting"
+        self._changed_at: datetime | None = None
+        """When the status now held changed, by the feed's clock: an older event handled later never replaces it."""
         self.needs_warmup = True
         """True at start and after any unhealthy status; only `mark_warm` clears it."""
         self.generation = 0
@@ -45,14 +49,24 @@ class Readiness:
         return "ok" if self.active else "degraded"
 
     def on_feed_status(self, status: FeedStatus) -> None:
-        """Apply a `feed.status` event: anything but healthy suspends candidates until a fresh warm-up."""
+        """Apply a `feed.status` event: anything but healthy suspends candidates until a fresh warm-up.
+
+        Order: events are at-least-once and a retried one can arrive after a newer one (kit 2.5 keeps no order), so
+        a status older than the one held (by `changed_at`) never replaces `feed_state`. An older unhealthy one still
+        asks for a warm-up, as it would have in order: a hole may have opened then. Equal times cannot be ordered:
+        the last one handled wins.
+        """
         if status.state != "healthy":
             # A hole may have opened in the series: it is only trusted again after a fresh warm-up.
             self.needs_warmup = True
             self.generation += 1
+        if self._changed_at is not None and status.changed_at < self._changed_at:
+            log.info("feed_status_older_ignored", held=self.feed_state, ignored=status.state)
+            return
         if status.state != self.feed_state:
             log.warning("feed_state_changed", old=self.feed_state, new=status.state, reason=status.reason)
         self.feed_state = status.state
+        self._changed_at = status.changed_at
 
     def request_warmup(self) -> None:
         """A new session (09:00 IST) or an operator asks for a fresh start."""
