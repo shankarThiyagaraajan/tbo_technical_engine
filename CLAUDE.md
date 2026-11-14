@@ -8,7 +8,7 @@ Turns market-feed candles into trade candidates, market context and technical sn
 
 ## Task files
 
-Before work, read `../tbo_platform/RULES.md` (`services/tbo_platform/RULES.md` on Bala's laptop; [on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/RULES.md)), this repository's `TASKS.md` and the common `../tbo_platform/TASKS.md` ([on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/TASKS.md)). Set the task's status and result when you stop.
+Before work, read `../tbo_platform/RULES.md` (`services/tbo_platform/RULES.md` on Bala's laptop; [on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/RULES.md)), this repository's `TASKS.md` and, only by search (`grep -n -A12 'repos:.*technical' ../tbo_platform/TASKS.md`; never read it whole, it is 123 KB), the common `../tbo_platform/TASKS.md` ([on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/TASKS.md)). Set the task's status and result when you stop.
 
 ## Layout
 
@@ -48,12 +48,12 @@ rule inline without a reason next to it.
 
 ## CI is not run
 
-CI is manual-only (`../tbo_platform/RULES.md`, "Checks and output"): do not trigger it and do not wait on it. Run the checks above locally and say in each PR that CI did not run.
+CI is manual-only (`../tbo_platform/RULES.md`, "Checks and output"): do not trigger it and do not wait on it. Run the level's checks locally (level B: `make lint format types security` and `uv run pytest --no-cov <touched tests>`; full `make check` only at level C, once, on the final head) and say in each PR that CI did not run.
 Tests need PostgreSQL and Redis (`TBO_TEST_DATABASE_URL`, `TBO_TEST_REDIS_URL`; see `compose.dev.yml`).
 
 ## Output
 
-`make check` is quiet on purpose (ruff `--quiet`, `mypy --no-error-summary`, `pytest -q --disable-warnings`); a failure still prints in full. Thresholds and tool lists are unchanged.
+`make check` is quiet on purpose (ruff `--quiet`, `mypy --no-error-summary`, `pytest -q --disable-warnings`); a failure still prints in full, so send a full run to a log and read only the failures: `make check > /tmp/technical-check.log 2>&1; echo exit=$?`, then `grep -E '^(FAILED|ERROR)| passed| failed' /tmp/technical-check.log | tail -20`; read more only around a failure. Thresholds and tool lists are unchanged.
 
 ## Releases
 
