@@ -28,7 +28,6 @@ def worker(redis: Any, sessions: Any, universe_status: int = 200) -> SignalWorke
 async def test_reads_the_universe_over_rest_when_the_stream_has_not_given_it(
     redis: Any, sessions: Any, monkeypatch: Any
 ) -> None:
-    monkeypatch.setenv("TBO_MODE", "lab")
     w = worker(redis, sessions)
     await w.ensure_universe(TODAY)
     assert w.universe.isins == {ISIN_A}
@@ -39,7 +38,6 @@ async def test_reads_the_universe_over_rest_when_the_stream_has_not_given_it(
 async def test_keeps_the_last_universe_when_the_fundamental_engine_is_down(
     redis: Any, sessions: Any, monkeypatch: Any
 ) -> None:
-    monkeypatch.setenv("TBO_MODE", "lab")
     w = worker(redis, sessions)
     await w.ensure_universe(TODAY)
     broken = worker(redis, sessions, universe_status=503)
@@ -49,7 +47,6 @@ async def test_keeps_the_last_universe_when_the_fundamental_engine_is_down(
 
 
 async def test_starts_and_stops_cleanly(redis: Any, sessions: Any, monkeypatch: Any) -> None:
-    monkeypatch.setenv("TBO_MODE", "lab")
     w = worker(redis, sessions)
     stop = asyncio.Event()
     task = asyncio.create_task(w.run(stop))
@@ -60,7 +57,6 @@ async def test_starts_and_stops_cleanly(redis: Any, sessions: Any, monkeypatch: 
 
 
 def test_the_feeds_index_source_brings_its_consumer(redis: Any, sessions: Any, monkeypatch: Any) -> None:
-    monkeypatch.setenv("TBO_MODE", "lab")
     plain = worker(redis, sessions)
     settings = Settings(redis_url="redis://unused", research_cache_dir="/nonexistent")
     feed = FakeFeed().client()
@@ -83,7 +79,6 @@ async def test_a_missing_universe_is_asked_for_once_a_minute_not_every_tick(
     redis: Any, sessions: Any, monkeypatch: Any
 ) -> None:
     """9.26: on a holiday or a late build, every 15 s tick used to call the fundamental engine."""
-    monkeypatch.setenv("TBO_MODE", "lab")
     calls: list[str] = []
 
     def handle(request: httpx.Request) -> httpx.Response:

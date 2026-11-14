@@ -1,20 +1,25 @@
 # Local development only: PostgreSQL and Redis for the tests and for running the service by hand.
 #   docker compose -f compose.dev.yml up -d --wait
-#   export TBO_TEST_DATABASE_URL=postgresql+asyncpg://tbo:tbo@127.0.0.1:55432/tbo_dev
+#   export TBO_TEST_DATABASE_URL=postgresql+asyncpg://tbo:tbo@127.0.0.1:55432/tbo_test_dev
 #   export TBO_TEST_REDIS_URL=redis://127.0.0.1:56379/0
+# The database is tbo_test_dev and carries the comment `tbo-test` (compose.dev/init/10-test-database.sql, run once when
+# the container is first created): the kit's guards refuse any other database. An older dev container still has
+# tbo_dev: `docker compose -f compose.dev.yml down -v`, then `up -d --wait` again.
 # The real stack (modes, ACL users, roles, secrets) is tbo_platform's deploy/compose.yml; nothing here is used there.
 name: tbo-technical-engine-dev
 services:
   postgres:
     image: timescale/timescaledb:2.17.2-pg16@sha256:4e459e217f00cbb09920c34d245501e63427e6767a495de57ce76823ff280f12
     environment:
-      POSTGRES_DB: tbo_dev
+      POSTGRES_DB: tbo_test_dev
       POSTGRES_USER: tbo
       POSTGRES_PASSWORD: tbo
       TIMESCALEDB_TELEMETRY: "off"
     ports: ["127.0.0.1:55432:5432"]
+    volumes:
+      - ./compose.dev/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tbo -d tbo_dev -h 127.0.0.1"]
+      test: ["CMD-SHELL", "pg_isready -U tbo -d tbo_test_dev -h 127.0.0.1"]
       interval: 5s
       retries: 12
   redis:

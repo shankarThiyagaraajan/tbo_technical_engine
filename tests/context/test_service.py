@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import func, select, text
 from tbo_contracts import validate
 from tbo_platform_kit.config.calendar import IST
+from tbo_platform_kit.testing import require_test_database
 
 from tbo_technical_engine.context.index_source import IndexSeries, IndexSnapshot, VixReading
 from tbo_technical_engine.schemas.candle import UniverseSnapshot
@@ -66,6 +67,7 @@ async def rows(sessions: Any, table: Any = market_context) -> int:
 
 async def clear(sessions: Any) -> None:
     async with sessions() as session, session.begin():
+        await require_test_database(await session.connection())  # P22
         await session.execute(text("TRUNCATE technical.market_context"))
 
 

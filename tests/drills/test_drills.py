@@ -58,7 +58,6 @@ async def rows_of(sessions: Any) -> dict[int, BoundaryLatency]:
 
 async def start(market: Market, redis: Any, sessions: Any, monkeypatch: Any, name: str = "w") -> tuple[Any, Clock]:
     """A warm, active worker one minute before the first live boundary closes."""
-    monkeypatch.setenv("TBO_MODE", "lab")
     clock = Clock(market.close_of(FIRST) - timedelta(minutes=1))
     worker = make_worker(market, redis, sessions, clock, name)
     for consumer in worker.consumers:  # the candle group starts at `$`: it must exist before the first event

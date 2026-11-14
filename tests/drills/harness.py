@@ -13,7 +13,7 @@ from typing import Any, cast
 
 from sqlalchemy import text
 from tbo_platform_kit.events import EventPublisher
-from tbo_platform_kit.mode import Mode, profile_for
+from tbo_platform_kit.testing import TEST_PROFILE, require_test_database
 
 from tbo_technical_engine.apps.signal_worker import SignalWorker
 from tbo_technical_engine.config.settings import Settings
@@ -27,7 +27,7 @@ TODAY = date(2026, 10, 15)
 STOCKS = 12
 HISTORY_SESSIONS = 20
 FIRST_BOUNDARY = 3  # index of the first 5-minute candle delivered live (09:30 start): earlier ones are history
-PROFILE = profile_for(Mode.LAB)
+PROFILE = TEST_PROFILE
 
 
 @dataclass
@@ -110,6 +110,7 @@ async def warm(worker: SignalWorker, clock: Clock, at: datetime) -> None:
 async def reset_tables(sessions: Any) -> None:
     """Empty the tables the drills read."""
     async with sessions() as session, session.begin():
+        await require_test_database(await session.connection())  # P22
         await session.execute(
             text(
                 "TRUNCATE technical.signal_candidate, technical.indicator_snapshot, technical.evaluation_boundary, "

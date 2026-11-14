@@ -15,7 +15,7 @@ Rows of the last 10 minutes have a `missed` count. Look at which column is non-z
   *Feed outage*. If it lasts, check the warm-up: log lines `warmup_done` / `warmup_failed` and the feed's REST health.
 - `cold` for some stocks: those stocks' history is short (a new listing, a feed gap). The next warm-up retries them.
 - `stale`: candles arrived more than 120 s late. The worker is behind: check the stream backlog
-  (`XINFO GROUPS lab.tbo.market_feed.candle`: `lag`) and CPU on the host; see *Latency high*.
+  (`XINFO GROUPS paper.tbo.market_feed.candle`: `lag`) and CPU on the host; see *Latency high*.
 - `failed`: an evaluator raised. Search the log for `evaluator_failed` (it names the evaluator and the exception class);
   the candle is stored and will not be evaluated again, so fix the cause before the next boundary.
 - `absent`: the feed did not publish those candles. Check the feed's status event and `tbo_market_feed_*` metrics; the

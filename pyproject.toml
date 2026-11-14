@@ -9,7 +9,7 @@ version = "0.1.0"
 description = "Turns market-feed candles into trade candidates, market context and technical snapshots."
 requires-python = ">=3.12"
 dependencies = [
-  "tbo-platform-kit[sentry]~=2.5",
+  "tbo-platform-kit[sentry]~=3.0",
   "tbo-contracts>=1.1,<2",
   "tbo-signals",  # the signals library (config/signals.yaml); pinned by commit in [tool.uv.sources]
   "numpy~=2.2.0",
@@ -41,9 +41,9 @@ dev = [
 ]
 
 [tool.uv.sources]
-tbo-platform-kit = { git = "https://github.com/shankarThiyagaraajan/tbo_platform", rev = "8df4ffceb25716f264d74b9a2bf6a06d965afea2", subdirectory = "packages/tbo_platform_kit" }
+tbo-platform-kit = { git = "https://github.com/shankarThiyagaraajan/tbo_platform", rev = "d6c234b8b6babae13cb0081f4a63cd4e1e0e4b11", subdirectory = "packages/tbo_platform_kit" }
 tbo-contracts = { git = "https://github.com/shankarThiyagaraajan/tbo_contracts", rev = "f884a2d3cc5fdf5fc6b0c60ffa91056fae2b58d9" }  # 1.30.0 (index candles, ADR-019)
-tbo-signals = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "e758307306e755c5f1df81614bb84cfde3c320ce", subdirectory = "packages/tbo_signals" }
+tbo-signals = { git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit", rev = "2bf19d70f5f293b5cdaa7da2db2544d4ac32fb4c", subdirectory = "packages/tbo_signals" }
 
 
 [tool.pytest.ini_options]

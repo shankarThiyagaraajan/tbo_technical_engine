@@ -11,6 +11,7 @@ import httpx
 import pytest
 from sqlalchemy import delete
 from tbo_platform_kit.http_client import UpstreamUnavailable
+from tbo_platform_kit.mode import ModeError
 from tbo_platform_kit.testing import TestKeys
 from tbo_signals import ManifestError, load_manifest
 from tbo_signals.config.constants import Level
@@ -64,7 +65,6 @@ def test_the_manifest_names_the_stages_of_the_board() -> None:
 
 
 def test_a_broken_manifest_stops_the_start(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TBO_MODE", "lab")
     bad = tmp_path / "signals.yaml"
     bad.write_text("service: technical\nsignals:\n  - id: technical.x\n    kind: nonsense\n")
     with pytest.raises(ManifestError):
@@ -74,7 +74,6 @@ def test_a_broken_manifest_stops_the_start(tmp_path: Path, monkeypatch: pytest.M
 @pytest.mark.parametrize(
     ("mode", "env", "level"),
     [
-        ("lab", None, Level.OFF),
         ("paper", None, Level.METRICS),
         ("live", "full", Level.FULL),
         ("paper", "off", Level.OFF),
@@ -94,8 +93,45 @@ def test_the_level_follows_the_mode_and_the_environment(
         signals.close()
 
 
+def test_the_test_profile_has_the_signals_off_and_names_the_test_stream(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No variable sets this: `signals_default` of the test profile is "off" (D2, P1), so no test sends a signal."""
+    monkeypatch.delenv("TBO_TECHNICAL_SIGNALS", raising=False)
+    off = build_signals(Settings(redis_url="redis://127.0.0.1:1/0", signals_file=MANIFEST))
+    try:
+        assert off.level is Level.OFF and off.mode == "paper" and off.stream == "test.signals.v1"
+    finally:
+        off.close()
+    monkeypatch.setenv("TBO_TECHNICAL_SIGNALS", "metrics")  # only the service's own variable raises it, still no sink
+    metrics = build_signals(Settings(redis_url=None, signals_file=MANIFEST))
+    try:
+        assert metrics.level is Level.METRICS and metrics.stream == "test.signals.v1"
+    finally:
+        metrics.close()
+
+
+@pytest.mark.parametrize(
+    ("value", "words"),
+    [
+        (None, "TBO_MODE is not set; set it to paper or live"),
+        ("", "TBO_MODE is not set; set it to paper or live"),
+        ("lab", "TBO_MODE is lab: lab mode was removed; use paper"),
+        ("PAPER", "TBO_MODE must be paper or live, not 'PAPER'"),
+    ],
+)
+@pytest.mark.tbo_real_mode
+def test_a_mode_that_is_not_paper_or_live_stops_the_signals_at_start(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, words: str
+) -> None:
+    """A real-mode test: no test profile, `TBO_MODE` read as a service reads it (a lab setting never means paper)."""
+    if value is None:
+        monkeypatch.delenv("TBO_MODE", raising=False)
+    else:
+        monkeypatch.setenv("TBO_MODE", value)
+    with pytest.raises(ModeError, match=re.escape(words)):
+        build_signals(Settings(signals_file=MANIFEST))
+
+
 def test_the_worker_serves_its_metrics_only_when_asked_and_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TBO_MODE", "lab")
     on, _ = spy_signals(Level.METRICS)
     off, _ = spy_signals(Level.OFF)
     served: list[int] = []
@@ -135,7 +171,7 @@ def test_boundaries_count_as_evaluated_or_missed_and_a_silent_feed_is_neither() 
 
 
 async def test_the_backlog_of_a_group_is_its_lag_plus_what_it_has_not_acknowledged(redis: Any) -> None:
-    stream = "paper.tbo.market_feed.candle"
+    stream = f"{PROFILE.stream_prefix}tbo.market_feed.candle"  # never a paper. key: the test Redis guard refuses those
     assert await stream_backlog(redis, stream, "technical.candles") == 0  # no stream yet
     await redis.xadd(stream, {"a": "1"})
     await redis.xgroup_create(stream, "technical.candles", id="0")
@@ -269,7 +305,7 @@ async def test_the_manifest_is_served_behind_the_read_scope(
     answer = await client.get(MANIFEST_PATH, headers=read)
     assert answer.status_code == 200
     body = answer.json()
-    assert body["service"] == "technical" and body["level"] == "off"  # lab: off, and still served
+    assert body["service"] == "technical" and body["level"] == "off"  # the test profile: off, and still served
     assert {s["id"] for s in body["signals"]} == {s.id for s in load_manifest(MANIFEST).signals}
     assert (await client.get(MANIFEST_PATH)).status_code == 401
     other = keys.bearer("tbo_platform", REPOSITORY, ["technical:research"])
@@ -282,7 +318,6 @@ def test_a_finished_backtest_is_an_event_and_a_missing_or_busy_one_is_not(
     import asyncio
     import importlib
 
-    monkeypatch.setenv("TBO_MODE", "lab")
     monkeypatch.setenv("TBO_TECHNICAL_DATABASE_URL", database_url)
     monkeypatch.setenv("TBO_TECHNICAL_REDIS_URL", redis_url)
     tasks = importlib.import_module("tbo_technical_engine.tasks")
