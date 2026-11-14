@@ -4,16 +4,11 @@
 
 Turns market-feed candles into trade candidates, market context and technical snapshots. Part of TBO; plans in the project's shared folder `tbo_plans/` (start with `INDEX.md`).
 
-**Read `docs/PROGRESS.md` first**, and keep it and this repository's row in `tbo_plans/PROGRESS.md` current in the
-same change as the code.
-
-## Progress file
-
-`docs/PROGRESS.md` is this repository's current state: version, what is done, what is in progress, open PRs and branches, what waits on the owner, and links to the deeper docs. **Read it before any work.** Update it in the same PR as every change, a docs-only one too (and this repository's row in `tbo_plans/PROGRESS.md`), so it never goes stale. Keep it under about 15 KB, newest first; move older detail to `docs/progress/archive/` and link it.
+**Read `docs/PROGRESS.md` before any work**, and update it in the same PR as every change, a docs-only one too (and this repository's row in `tbo_plans/PROGRESS.md`), so it never goes stale.
 
 ## Task files
 
-Before work, read `../tbo_platform/RULES.md` (`services/tbo_platform/RULES.md` on Bala's laptop; [on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/RULES.md)), this repository's `TASKS.md` and the common `../tbo_platform/TASKS.md` ([on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/TASKS.md)). Keep `docs/PROGRESS.md` current; set the task's status and result when you stop.
+Before work, read `../tbo_platform/RULES.md` (`services/tbo_platform/RULES.md` on Bala's laptop; [on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/RULES.md)), this repository's `TASKS.md` and the common `../tbo_platform/TASKS.md` ([on GitHub](https://github.com/shankarThiyagaraajan/tbo_platform/blob/main/TASKS.md)). Set the task's status and result when you stop.
 
 ## Layout
 
@@ -25,7 +20,7 @@ internal records) · `config/` (`settings.py`: `Settings`, `REPOSITORY`, `SHORT_
 
 ## Check before pushing
 
-**Which checks a change runs (the full rule is `../tbo_platform/RULES.md`, "Check levels"; read that file before work):** docs only: none. Small or medium, on any path (level B): lint, format, types, security and only the tests it touches, no SonarQube. Big (level C: a breaking change, or a large change on a risk path): the full `make check` below and SonarQube's scoped scan green. Say the level in the PR body: it alone picks the scan.
+**Which checks a change runs (the full rule is `../tbo_platform/RULES.md`, "Check levels"; read that file before work):** docs only: none. Small or medium, on any path (level B): lint, format, types, security and only the tests it touches, no SonarQube. Big (level C: a breaking change, or a large change on a risk path): the full `make check` below, once, on the final head. SonarQube scans `main` every night and a level C PR for information; no session waits for it. Say the level in the PR body.
 
 ```sh
 make check
@@ -53,8 +48,7 @@ rule inline without a reason next to it.
 
 ## CI is not run
 
-GitHub Actions minutes are used up (owner's rule, 2026-10-15, all TBO repositories). The workflow stays but is manual-only:
-do not trigger it and do not wait on it. Run the checks above locally and say in each PR that CI did not run.
+CI is manual-only (`../tbo_platform/RULES.md`, "Checks and output"): do not trigger it and do not wait on it. Run the checks above locally and say in each PR that CI did not run.
 Tests need PostgreSQL and Redis (`TBO_TEST_DATABASE_URL`, `TBO_TEST_REDIS_URL`; see `compose.dev.yml`).
 
 ## Output
@@ -63,9 +57,4 @@ Tests need PostgreSQL and Redis (`TBO_TEST_DATABASE_URL`, `TBO_TEST_REDIS_URL`; 
 
 ## Releases
 
-Checks run locally (`make check`); GitHub's runner is used only for tags and releases (project rule 17). Versions are `vMAJOR.MINOR.PATCH`,
-each number 0 to 50, starting at v0.0.0 until the first major release: `main` = breaking change, `sub` = notable change or feature,
-`macro` = bug fix or review fix. A change of real size or type gets a release; a typo or tiny edit gets none. Releases are requested with the
-`release-request` skill (see below) and made by the laptop release watcher. Tags are never made by hand (lesson 7).
-
-Before you report a change done, use the `release-request` skill to decide whether it needs a release (a change of real size or type, see above; a docs-only change or a typo gets none). If it does, add `releases/requests/<name>.md` (`repo:`, `level:`, then What changed, Why, Action needed) and merge it to `main`; the laptop release watcher then makes the tag and release. Never tag by hand, and never say a release exists until you have seen it. Say in your thread what you decided: request filed with its level, or "no release" with the reason.
+See `../tbo_platform/RULES.md` "Releases". This repository is in the release watcher's list.
