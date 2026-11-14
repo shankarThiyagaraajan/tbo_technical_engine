@@ -4,9 +4,6 @@
 
 Turns market-feed candles into trade candidates, market context and technical snapshots. Part of TBO; plans in the project's shared folder `tbo_plans/` (start with `INDEX.md`).
 
-**Read `docs/PROGRESS.md` first**, and keep it and this repository's row in `tbo_plans/PROGRESS.md` current in the
-same change as the code.
-
 **Read `docs/PROGRESS.md` before any work**, and update it in the same PR as every change, a docs-only one too (and this repository's row in `tbo_plans/PROGRESS.md`), so it never goes stale.
 
 ## Task files
