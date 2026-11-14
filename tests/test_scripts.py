@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -38,3 +39,133 @@ def test_the_digests_are_repeatable() -> None:
 def test_the_jit_on_and_off_give_identical_digests_on_twenty_stock_sessions() -> None:
     on, off = identity_check.compare(stocks=5, sessions=4)
     assert on == off and int(on["candidate_count"]) > 0
+
+
+# ---- `benchmark live` writes and deletes rows and flushes Redis: it runs only against a test database and a test Redis
+# (remove-lab-mode P22). It reads TBO_TEST_DATABASE_URL and TBO_TEST_REDIS_URL, never TBO_TECHNICAL_*, which a shell
+# that has a real stack's settings exported would otherwise hand it.
+
+UNREACHABLE_DB = "postgresql+asyncpg://tbo@127.0.0.1:1/{name}"
+LIVE = ("live", "--stocks", "2", "--boundaries", "2", "--json")
+
+
+@pytest.mark.tbo_real_mode
+def test_live_refuses_a_run_that_is_not_on_the_test_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run as `TBO_MODE=paper uv run python -m scripts.benchmark live` (no profile installed, the marker), it must
+    stop before any connection."""
+    from tbo_platform_kit import mode as kit_mode
+
+    assert kit_mode.installed_profile() is None
+    monkeypatch.setenv("TBO_MODE", "paper")
+    monkeypatch.setenv("TBO_TEST_DATABASE_URL", UNREACHABLE_DB.format(name="tbo_test_dev"))
+    monkeypatch.setenv("TBO_TEST_REDIS_URL", "redis://127.0.0.1:1/0")
+    with pytest.raises(SystemExit, match=r"tbo_platform_kit\.testing\.run"):
+        benchmark.main(list(LIVE))
+
+
+@pytest.mark.tbo_real_mode
+def test_live_refuses_a_set_mode_beside_the_installed_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The test profile installed (as the runner does) but `TBO_MODE=paper` in the environment: the process reads
+    paper, not the test profile, so it must stop before any connection."""
+    from tbo_platform_kit import mode as kit_mode
+    from tbo_platform_kit.testing import TEST_PROFILE
+
+    kit_mode._install(TEST_PROFILE)
+    try:
+        monkeypatch.setenv("TBO_MODE", "paper")
+        monkeypatch.setenv("TBO_TEST_DATABASE_URL", UNREACHABLE_DB.format(name="tbo_test_dev"))
+        monkeypatch.setenv("TBO_TEST_REDIS_URL", "redis://127.0.0.1:1/0")
+        assert kit_mode.installed_profile() is TEST_PROFILE and kit_mode.current_profile() is not TEST_PROFILE
+        with pytest.raises(SystemExit, match=r"tbo_platform_kit\.testing\.run"):
+            benchmark.main(list(LIVE))
+    finally:
+        kit_mode._install(None)  # the marker's own state; the plugin puts the test profile back after the test
+
+
+@pytest.mark.parametrize("name", ["tbo_paper", "tbo_live", "tbo_dev", "tbo_test", "technical"])
+def test_live_refuses_a_database_that_is_not_a_test_database(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    from tbo_platform_kit.guards import NotATestTarget
+
+    monkeypatch.setenv("TBO_TEST_DATABASE_URL", UNREACHABLE_DB.format(name=name))
+    monkeypatch.setenv("TBO_TEST_REDIS_URL", "redis://127.0.0.1:1/0")
+    with pytest.raises(NotATestTarget):  # refused by name, before a connection (the port is closed)
+        benchmark.main(list(LIVE))
+
+
+def test_live_refuses_a_remote_or_query_string_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tbo_platform_kit.guards import NotATestTarget
+
+    monkeypatch.setenv("TBO_TEST_REDIS_URL", "redis://127.0.0.1:1/0")
+    for url in (
+        "postgresql+asyncpg://tbo@db.example.invalid/tbo_test_dev",
+        "postgresql+asyncpg://tbo@127.0.0.1:1/tbo_test_dev?host=db.example.invalid",
+    ):
+        monkeypatch.setenv("TBO_TEST_DATABASE_URL", url)
+        with pytest.raises(NotATestTarget):
+            benchmark.main(list(LIVE))
+
+
+def test_live_does_not_read_the_services_own_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TBO_TEST_DATABASE_URL", raising=False)
+    monkeypatch.delenv("TBO_TEST_REDIS_URL", raising=False)
+    monkeypatch.setenv("TBO_TECHNICAL_DATABASE_URL", UNREACHABLE_DB.format(name="tbo_test_dev"))
+    monkeypatch.setenv("TBO_TECHNICAL_REDIS_URL", "redis://127.0.0.1:1/0")
+    with pytest.raises(SystemExit, match="TBO_TEST_DATABASE_URL"):
+        benchmark.main(list(LIVE))
+
+
+async def test_live_leaves_a_redis_that_holds_a_real_modes_key_alone(
+    monkeypatch: pytest.MonkeyPatch, database_url: str, redis_url: str, redis: Any
+) -> None:
+    import asyncio
+
+    from tbo_platform_kit.guards import NotATestTarget
+
+    monkeypatch.setenv("TBO_TEST_DATABASE_URL", database_url)
+    monkeypatch.setenv("TBO_TEST_REDIS_URL", redis_url)
+    await redis.set("paper.not_ours", "1")
+    try:
+        with pytest.raises(NotATestTarget):
+            await asyncio.to_thread(benchmark.main, list(LIVE))
+        assert await redis.get("paper.not_ours") == b"1"
+    finally:
+        await redis.delete("paper.not_ours")
+
+
+async def test_live_refuses_a_test_named_database_without_the_test_comment(
+    monkeypatch: pytest.MonkeyPatch, database_url: str, redis_url: str, redis: Any
+) -> None:
+    """`tbo_test_<x>` by name, on loopback, but without the comment `tbo-test`: the connection guard refuses it before
+    any row is touched and before Redis is flushed (the URL check alone would let it through)."""
+    import asyncio
+    import uuid
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from tbo_platform_kit.guards import NotATestTarget, require_test_database
+
+    name = f"tbo_test_nocomment_{uuid.uuid4().hex[:8]}"
+    engine = create_async_engine(database_url, isolation_level="AUTOCOMMIT")
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text(f"CREATE DATABASE {name}"))
+        monkeypatch.setenv("TBO_TEST_DATABASE_URL", database_url.rsplit("/", 1)[0] + "/" + name)
+        monkeypatch.setenv("TBO_TEST_REDIS_URL", redis_url)
+        await redis.set("test.kept", "1")
+        with pytest.raises(NotATestTarget, match="does not carry the comment 'tbo-test'"):
+            await asyncio.to_thread(benchmark.main, list(LIVE))
+        assert await redis.get("test.kept") == b"1"  # the database guard ran before the Redis flush
+    finally:
+        async with engine.connect() as conn:
+            await require_test_database(conn)  # P22: the drop runs on the suite's own test database's server
+            await conn.execute(text(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+        await engine.dispose()
+
+
+def test_live_runs_on_a_test_database_and_a_test_redis(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, database_url: str, redis_url: str
+) -> None:
+    monkeypatch.setenv("TBO_TEST_DATABASE_URL", database_url)
+    monkeypatch.setenv("TBO_TEST_REDIS_URL", redis_url)
+    result = run(capsys, *LIVE[:-1])
+    assert result["mode"] == "live" and result["stocks"] == 2

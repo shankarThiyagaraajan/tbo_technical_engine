@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select, text
+from tbo_platform_kit.testing import flush_test_redis
 
 from tbo_technical_engine.services.cooldowns import CooldownStore
 from tbo_technical_engine.services.evaluator import StrategyEvaluator
@@ -79,7 +80,7 @@ async def test_the_same_candles_again_add_nothing(app: Any, settings: Any, redis
     buffer, runner, _ = build(app, settings, redis)
     await play(buffer, runner)
     stored, queued = await count(sessions, signal_candidate), await count(sessions, outbox)
-    await redis.flushdb()  # the checkpoint is gone too: this process has no memory of firing
+    await flush_test_redis(redis)  # P22; the checkpoint is gone too: this process has no memory of firing
     buffer2, runner2, _ = build(app, settings, redis)
     await play(buffer2, runner2)
     assert await count(sessions, signal_candidate) == stored

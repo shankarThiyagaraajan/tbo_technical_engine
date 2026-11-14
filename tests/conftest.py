@@ -1,7 +1,12 @@
 """Fixtures: a real PostgreSQL and Redis, the schema migrated with Alembic, the app with test token keys.
 
-Set TBO_TEST_DATABASE_URL (postgresql+asyncpg://...) and TBO_TEST_REDIS_URL; `compose.dev.yml` starts both, and
-CI provides them as service containers. Without them the tests are skipped locally and fail in CI.
+Set TBO_TEST_DATABASE_URL (postgresql+asyncpg://..., a database named `tbo_test_<x>` that carries the comment
+`tbo-test`) and TBO_TEST_REDIS_URL; `compose.dev.yml` starts both, and CI provides them as service containers. Without
+them the tests are skipped locally and fail in CI.
+
+Every test runs on the kit's test profile (mode paper, prefix `test.`, every reach field off), which the kit's pytest
+plugin installs and no environment value can select; the lock below stops a run where it is not installed (P18).
+Destructive set-up (the schema drop, the Redis flush) runs only behind the kit's guards (P22).
 """
 
 from __future__ import annotations
@@ -18,10 +23,19 @@ import pytest
 import redis.asyncio as aioredis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from tbo_platform_kit.testing import TestKeys
+from tbo_platform_kit.mode import current_profile
+from tbo_platform_kit.testing import (
+    TEST_PROFILE,
+    TestKeys,
+    flush_test_redis,
+    require_test_database,
+)
 
 from tbo_technical_engine.app import build_app
 from tbo_technical_engine.config.settings import REPOSITORY, SHORT_NAME, Settings
+
+if current_profile() is not TEST_PROFILE:  # P18: the kit's plugin installs it; a run without it stops here
+    pytest.exit("the kit test profile is not installed", 2)
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = f"TBO_{SHORT_NAME.upper()}_"
@@ -45,6 +59,7 @@ def database_url() -> str:
     async def reset() -> None:
         engine = create_async_engine(url)
         async with engine.begin() as conn:
+            await require_test_database(conn)  # P22: never a real database
             await conn.execute(text(f"DROP SCHEMA IF EXISTS {SHORT_NAME} CASCADE"))
             await conn.execute(text(f"CREATE SCHEMA {SHORT_NAME}"))
             await conn.execute(text(f"SET search_path TO {SHORT_NAME}, public"))
@@ -53,9 +68,14 @@ def database_url() -> str:
     import asyncio
 
     asyncio.run(reset())
-    env = {**os.environ, "TBO_MODE": "lab", f"{PREFIX}DATABASE_URL": url}
+    # P19: the child runs on the test profile through the kit's runner, which refuses a set TBO_MODE; it gets none.
+    env = {k: v for k, v in os.environ.items() if k != "TBO_MODE"} | {f"{PREFIX}DATABASE_URL": url}
     migrated = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"], cwd=ROOT, env=env, capture_output=True, text=True
+        [sys.executable, "-m", "tbo_platform_kit.testing.run", "alembic", "upgrade", "head"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
     )
     assert migrated.returncode == 0, migrated.stderr
     return url
@@ -72,15 +92,14 @@ def keys() -> TestKeys:
 
 
 @pytest.fixture
-def settings(database_url: str, redis_url: str, monkeypatch: pytest.MonkeyPatch) -> Settings:
-    monkeypatch.setenv("TBO_MODE", "lab")
+def settings(database_url: str, redis_url: str) -> Settings:
     return Settings(database_url=database_url, redis_url=redis_url, contract_file=ROOT / "contract" / "openapi.json")
 
 
 @pytest.fixture
 async def redis(redis_url: str) -> AsyncIterator[Any]:
     client = aioredis.Redis.from_url(redis_url)
-    await client.flushdb()
+    await flush_test_redis(client)  # P22: guard, flush, marker
     yield client
     await client.aclose()
 
@@ -116,5 +135,6 @@ async def sessions(app: Any) -> Any:
             "backtest_trade",
             "strategy_evidence",
         )
+        await require_test_database(await session.connection())  # P22
         await session.execute(text("TRUNCATE " + ", ".join(f"{SHORT_NAME}.{t}" for t in tables)))
     return factory

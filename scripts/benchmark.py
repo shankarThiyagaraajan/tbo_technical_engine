@@ -2,7 +2,7 @@
 
     uv run python -m scripts.benchmark replay --stocks 20 --sessions 60
     uv run python -m scripts.benchmark sweep  --stocks 10 --sessions 150
-    uv run python -m scripts.benchmark live   --stocks 500 --boundaries 12     # needs PostgreSQL and Redis, see below
+    uv run python -m tbo_platform_kit.testing.run scripts.benchmark live --stocks 500 --boundaries 12   # see below
     uv run python -m scripts.benchmark memory --stocks 500
 
 `replay`: seconds per stock-session for one parameter set (the tape plus one replay).
@@ -14,8 +14,11 @@ them.
 Latency of a stock = time from the boundary until its evaluation finished (the whole batch queues behind one consumer),
 so the p95 is the figure the plan's "candle close to candidate, p95 under 2 s" is about. It excludes the feed's own time
 to build and publish the candle and the network, which only a real session can measure. Needs
-TBO_TECHNICAL_DATABASE_URL and TBO_TECHNICAL_REDIS_URL of a database migrated with `alembic upgrade head`; it writes
-(and deletes at the start) rows in the `technical` schema, so point it at a scratch database.
+TBO_TEST_DATABASE_URL and TBO_TEST_REDIS_URL of a test database migrated with `alembic upgrade head`; it writes (and
+deletes at the start) rows in the `technical` schema and flushes the Redis database. It never reads TBO_TECHNICAL_*, and
+it refuses unless the database is named `tbo_test_<x>` with the comment `tbo-test` (the dev container's `tbo_test_dev`),
+the Redis holds no `paper.*` or `live.*` key, and it runs on the kit's test profile:
+    uv run python -m tbo_platform_kit.testing.run scripts.benchmark live --stocks 500 --boundaries 12
 
 `memory`: the candle buffer filled to capacity (1,900 candles a stock) for `--stocks`: bytes per candle as Python
 traces them, the projection to 500 stocks, and this process's peak RSS against the signal worker's 1 GB limit
@@ -241,20 +244,39 @@ async def live_mode(args: argparse.Namespace) -> dict[str, Any]:
     import redis.asyncio as aioredis
     from sqlalchemy import text
     from tbo_platform_kit.db import create_engine, session_factory
+    from tbo_platform_kit.guards import check_test_database_url, flush_test_redis, require_test_database
+    from tbo_platform_kit.mode import current_profile, installed_profile
 
     from tbo_technical_engine.config.settings import Settings
 
-    settings = Settings(research_cache_dir="/nonexistent")
-    settings.require("database_url", "redis_url")
-    assert settings.redis_url is not None
-    redis = aioredis.Redis.from_url(settings.redis_url.get_secret_value())
+    # P22: this mode deletes rows and flushes Redis, so it reaches only a test database and a test Redis, named by the
+    # TBO_TEST_* variables (never the service's own settings, which a shell may hold for a real stack), and only on the
+    # kit's test profile (the runner installs it and refuses a set TBO_MODE).
+    if installed_profile() is None or current_profile() is not installed_profile():
+        raise SystemExit(
+            "live needs the test profile: uv run python -m tbo_platform_kit.testing.run scripts.benchmark live ..."
+        )
+    database_url, redis_url = os.environ.get("TBO_TEST_DATABASE_URL"), os.environ.get("TBO_TEST_REDIS_URL")
+    if not database_url or not redis_url:
+        raise SystemExit("live needs TBO_TEST_DATABASE_URL (a tbo_test_<x> database) and TBO_TEST_REDIS_URL")
+    check_test_database_url(database_url)  # the first refusal, before any connection
+    settings = Settings(research_cache_dir="/nonexistent", database_url=database_url, redis_url=redis_url)
+    redis = aioredis.Redis.from_url(redis_url)
     engine = create_engine(settings)
     sessions = session_factory(engine)
+    try:
+        async with engine.connect() as connection:
+            await require_test_database(connection)  # name, comment and a loopback peer, read on this connection
+        await flush_test_redis(redis)  # guard, flush, marker
+    except BaseException:
+        await engine.dispose()
+        await redis.aclose()
+        raise
     async with sessions() as session, session.begin():
+        await require_test_database(await session.connection())
         await session.execute(
             text("TRUNCATE technical.indicator_snapshot, technical.signal_candidate, technical.outbox")
         )
-    await redis.flushdb()
     worker, data, today = _warm_worker(args, settings, redis, sessions)
     clock = {"now": datetime.now(UTC)}
     worker.ingest.clock = lambda: clock["now"]

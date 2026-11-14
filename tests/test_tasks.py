@@ -10,12 +10,12 @@ from typing import Any
 import pytest
 from tbo_platform_kit.celery_app import ResearchBlackout, research_task
 from tbo_platform_kit.mode import Mode, profile_for
+from tbo_platform_kit.testing import TEST_PROFILE
 
 
 @pytest.fixture
 def tasks(monkeypatch: pytest.MonkeyPatch, database_url: str, redis_url: str) -> ModuleType:
     # tasks.py reads its settings when imported, so the environment is set first.
-    monkeypatch.setenv("TBO_MODE", "lab")
     monkeypatch.setenv("TBO_TECHNICAL_DATABASE_URL", database_url)
     monkeypatch.setenv("TBO_TECHNICAL_REDIS_URL", redis_url)
     return importlib.import_module("tbo_technical_engine.tasks")
@@ -41,8 +41,10 @@ def test_research_is_refused_during_the_session_in_paper_and_live(mode: Mode) ->
     assert after() == "ran"
 
 
-def test_research_always_runs_in_lab() -> None:
-    during = research_task(profile_for(Mode.LAB), lambda: datetime(2026, 10, 15, 5, 0, tzinfo=UTC))(lambda: "ran")
+def test_research_always_runs_on_the_test_profile() -> None:
+    """The test profile has no blackout, so no test depends on the clock (remove-lab-mode D2-5, P1)."""
+    assert TEST_PROFILE.research_blackout is None
+    during = research_task(TEST_PROFILE, lambda: datetime(2026, 10, 15, 5, 0, tzinfo=UTC))(lambda: "ran")
     assert during() == "ran"
 
 

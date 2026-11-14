@@ -15,7 +15,7 @@ import pytest
 from tbo_platform_kit.calendar import CalendarUnknown
 from tbo_platform_kit.events import EventPublisher
 from tbo_platform_kit.http_client import StaticTokenProvider, SyncServiceClient
-from tbo_platform_kit.mode import Mode, profile_for
+from tbo_platform_kit.testing import TEST_PROFILE
 
 from tbo_technical_engine.config.settings import Settings
 from tbo_technical_engine.consumers.handlers import CALENDAR_STREAM, calendar_consumer
@@ -24,7 +24,7 @@ from tests.support import sample, spy_signals
 
 NOW = datetime(2026, 10, 17, 3, 0, tzinfo=UTC)
 STAMP = "2026-10-17T03:00:00Z"
-PROFILE = profile_for(Mode.LAB)
+PROFILE = TEST_PROFILE
 GANDHI = date(2026, 10, 2)  # a Friday, closed
 MUHURAT = date(2026, 11, 8)  # a Sunday evening session
 SATURDAY = date(2026, 3, 14)  # a Saturday that traded

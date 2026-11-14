@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from tbo_contracts import validate_event
 from tbo_platform_kit.events import EventPublisher
-from tbo_platform_kit.mode import Mode, profile_for
+from tbo_platform_kit.testing import TEST_PROFILE
 
 from tbo_technical_engine.consumers.handlers import (
     CANDLE_STREAM,
@@ -30,7 +30,7 @@ from tbo_technical_engine.services.universe import UniverseHolder
 from tbo_technical_engine.services.warmup import WarmupSpec
 from tests.support import ISIN_A, ISIN_B, FakeFeed, candle, candle_json, history, sample, spy_signals
 
-PROFILE = profile_for(Mode.LAB)
+PROFILE = TEST_PROFILE
 START = datetime(2026, 10, 15, 4, 25, tzinfo=UTC)
 
 

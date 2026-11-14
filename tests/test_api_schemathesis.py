@@ -55,25 +55,23 @@ CHECKS = [
 @pytest.fixture(scope="module")
 def server(database_url: str, redis_url: str, keys: TestKeys) -> Iterator[str]:
     """The app under uvicorn on a free loopback port, in its own thread and event loop."""
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("TBO_MODE", "lab")
-        app = build_app(
-            Settings(database_url=database_url, redis_url=redis_url, contract_file=ROOT / "contract" / "openapi.json"),
-            verifier=keys.verifier(REPOSITORY),
-        )
-        with socket.socket() as s:
-            s.bind(("127.0.0.1", 0))
-            port = s.getsockname()[1]
-        srv = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None, lifespan="on"))
-        thread = threading.Thread(target=srv.run, daemon=True)
-        thread.start()
-        for _ in range(100):
-            if srv.started:
-                break
-            time.sleep(0.05)
-        yield f"http://127.0.0.1:{port}"
-        srv.should_exit = True
-        thread.join(10)
+    app = build_app(
+        Settings(database_url=database_url, redis_url=redis_url, contract_file=ROOT / "contract" / "openapi.json"),
+        verifier=keys.verifier(REPOSITORY),
+    )
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    srv = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None, lifespan="on"))
+    thread = threading.Thread(target=srv.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if srv.started:
+            break
+        time.sleep(0.05)
+    yield f"http://127.0.0.1:{port}"
+    srv.should_exit = True
+    thread.join(10)
 
 
 @pytest.fixture(scope="module")

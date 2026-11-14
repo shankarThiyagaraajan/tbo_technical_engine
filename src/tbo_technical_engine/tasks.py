@@ -140,8 +140,9 @@ async def _run_backtest(backtest_id: str) -> str:
 @research_task(settings.profile)
 def run_backtest(backtest_id: str) -> str:
     """Run one queued backtest. The decorator is the mode wiring: in paper and live this raises ResearchBlackout from
-    09:00 to 15:45 IST (weekdays), so research never competes with live signals; in lab it always runs. Idempotent: a
-    finished job is left alone, and a running one is claimed only when its worker is long gone (`BacktestRunner`)."""
+    09:00 to 15:45 IST (weekdays), so research never competes with live signals; the test profile has no blackout.
+    Idempotent: a finished job is left alone, and a running one is claimed only when its worker is long gone
+    (`BacktestRunner`)."""
     return asyncio.run(_run_backtest(backtest_id))
 
 

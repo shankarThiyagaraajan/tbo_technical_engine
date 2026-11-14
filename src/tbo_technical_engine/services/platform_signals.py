@@ -34,12 +34,15 @@ def build_signals(settings: Settings, registry: CollectorRegistry | None = None)
     Redis connection is made; otherwise events (full) and security incidents go to `<mode>.signals.v1` in the
     background."""
     manifest = load_manifest(settings.signals_file)
-    mode = settings.profile.mode.value
-    level = resolve_level(manifest.service, mode)
+    profile = settings.profile
+    mode = profile.mode.value
+    # The profile's own default (the test profile: off) comes before the mode's; the service's variable still wins.
+    level = resolve_level(manifest.service, mode, default=profile.signals_default)
+    stream = stream_name(mode, prefix=profile.stream_prefix)
     sink = None
     if level is not Level.OFF and settings.redis_url is not None:
-        sink = StreamSink.from_url(settings.redis_url.get_secret_value(), stream_name(mode))
-    return Signals(manifest, mode=mode, level=level, registry=registry, sink=sink)
+        sink = StreamSink.from_url(settings.redis_url.get_secret_value(), stream)
+    return Signals(manifest, mode=mode, level=level, stream_prefix=profile.stream_prefix, registry=registry, sink=sink)
 
 
 def serve_metrics(settings: Settings, signals: Signals) -> bool:

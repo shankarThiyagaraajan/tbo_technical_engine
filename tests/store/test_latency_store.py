@@ -76,7 +76,7 @@ def samples(metrics: Metrics) -> dict[str, float]:
 
 
 def test_the_gauges_show_today_s_record() -> None:
-    metrics = Metrics("technical", "t", "lab")
+    metrics = Metrics("technical", "t", "paper")
     gauges = LatencyGauges(metrics)
     now = datetime(2026, 10, 15, 5, 0, tzinfo=UTC)
     gauges.update([], now)
@@ -98,7 +98,7 @@ def test_the_gauges_show_today_s_record() -> None:
 async def test_the_refresh_loop_reads_the_database_and_survives_a_failed_read(sessions: Any) -> None:
     import asyncio
 
-    metrics = Metrics("technical", "t", "lab")
+    metrics = Metrics("technical", "t", "paper")
     gauges = LatencyGauges(metrics)
     async with sessions() as s, s.begin():
         await store.save_many(s, [row(0)])
