@@ -79,9 +79,11 @@ def test_a_broken_manifest_stops_the_start(tmp_path: Path, monkeypatch: pytest.M
         ("paper", "off", Level.OFF),
     ],
 )
+@pytest.mark.tbo_real_mode
 def test_the_level_follows_the_mode_and_the_environment(
     monkeypatch: pytest.MonkeyPatch, mode: str, env: str | None, level: Level
 ) -> None:
+    """A real-mode test: paper and live read as the service reads them (the sink is a closed port)."""
     monkeypatch.setenv("TBO_MODE", mode)
     monkeypatch.delenv("TBO_TECHNICAL_SIGNALS", raising=False)
     if env:

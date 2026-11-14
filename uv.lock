@@ -3358,8 +3358,8 @@ dependencies = [
 
 [[package]]
 name = "tbo-platform-kit"
-version = "3.0.0"
-source = { git = "https://github.com/shankarThiyagaraajan/tbo_platform?subdirectory=packages%2Ftbo_platform_kit&rev=d6c234b8b6babae13cb0081f4a63cd4e1e0e4b11#d6c234b8b6babae13cb0081f4a63cd4e1e0e4b11" }
+version = "3.0.1"
+source = { git = "https://github.com/shankarThiyagaraajan/tbo_platform?subdirectory=packages%2Ftbo_platform_kit&rev=d238cc07cf34af2d33e760a512df3eae007aefa0#d238cc07cf34af2d33e760a512df3eae007aefa0" }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
@@ -3439,7 +3439,7 @@ requires-dist = [
     { name = "polars", specifier = "~=1.44.0" },
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "tbo-contracts", git = "https://github.com/shankarThiyagaraajan/tbo_contracts?rev=f884a2d3cc5fdf5fc6b0c60ffa91056fae2b58d9" },
-    { name = "tbo-platform-kit", extras = ["sentry"], git = "https://github.com/shankarThiyagaraajan/tbo_platform?subdirectory=packages%2Ftbo_platform_kit&rev=d6c234b8b6babae13cb0081f4a63cd4e1e0e4b11" },
+    { name = "tbo-platform-kit", extras = ["sentry"], git = "https://github.com/shankarThiyagaraajan/tbo_platform?subdirectory=packages%2Ftbo_platform_kit&rev=d238cc07cf34af2d33e760a512df3eae007aefa0" },
     { name = "tbo-signals", git = "https://github.com/shankarThiyagaraajan/tbo_platform_kit?subdirectory=packages%2Ftbo_signals&rev=2bf19d70f5f293b5cdaa7da2db2544d4ac32fb4c" },
     { name = "vectorbt", specifier = ">=0.28,<0.29" },
 ]

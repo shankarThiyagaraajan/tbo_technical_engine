@@ -71,7 +71,7 @@ def database_url() -> str:
     # P19: the child runs on the test profile through the kit's runner, which refuses a set TBO_MODE; it gets none.
     env = {k: v for k, v in os.environ.items() if k != "TBO_MODE"} | {f"{PREFIX}DATABASE_URL": url}
     migrated = subprocess.run(
-        [sys.executable, "-m", "tbo_platform_kit.testing.run", "tests.migrate", "upgrade", "head"],
+        [sys.executable, "-m", "tbo_platform_kit.testing.run", "alembic", "upgrade", "head"],
         cwd=ROOT,
         env=env,
         capture_output=True,
