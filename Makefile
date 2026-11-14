@@ -1,12 +1,14 @@
-# One command for every standard: `make check`. CI is manual-only, so this is what runs before a push.
+# One command for every standard: `make check`, for level C only (tbo_platform RULES.md "Check levels"); smaller changes run the single targets below. CI is manual-only.
 # Tests need PostgreSQL and Redis (TBO_TEST_DATABASE_URL, TBO_TEST_REDIS_URL; see compose.dev.yml).
 
-.PHONY: check lint format-check types security audit test hooks
+.PHONY: check lint format format-check types security audit test hooks
 
 check: lint format-check types security audit test
 
 lint:
 	uv run ruff check --quiet .
+
+format: format-check
 
 format-check:
 	uv run ruff format --check --quiet .
